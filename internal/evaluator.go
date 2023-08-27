@@ -19,29 +19,6 @@ type RegoEvaluator struct {
 }
 
 func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
-	rego_object := rego.New(
-		// TODO: @CONFIG strict mode?
-		rego.Strict(true),
-		rego.Module("docker_socket_meta_policy", META_POLICY),
-		rego.Query("output := data.docker_socket_meta_policy; ok := output.ok"),
-	)
-	policyLoader(rego_object)
-	meta_policy_validity_query, err := rego_object.PrepareForEval(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	meta_policy_validity_result, err := meta_policy_validity_query.Eval(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	if !meta_policy_validity_result[0].Bindings["ok"].(bool) {
-		if pretty_output, err := json.Marshal(meta_policy_validity_result[0].Bindings["output"]); err != nil {
-			return nil, fmt.Errorf("meta policy validation failed and unable to serialize output to JSON (%s): %v", err, meta_policy_validity_result[0].Bindings["output"])
-		} else {
-			return nil, fmt.Errorf("meta policy validation failed: %s", pretty_output)
-		}
-	}
-
 	// TODO: @CONFIG store in files instead of inmem? A lot of extra complexity, especially on reloads
 	store := inmem.NewFromObject(map[string]interface{}{
 		"docker_socket_authorizer_storage": map[string]interface{}{},
@@ -60,22 +37,30 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		}
 	}()
 
-	policy_list_rego := rego.New(
+	policy_meta_rego := rego.New(
 		// TODO: @CONFIG strict mode?
 		rego.Strict(true),
-		rego.Query("policies = [policy | data.docker_socket_authorizer[policy]]"),
+		rego.Module("docker_socket_meta_policy", META_POLICY),
+		rego.Query(QUERY),
 	)
-	policyLoader(policy_list_rego)
-	policy_list_query, err := policy_list_rego.PrepareForEval(context.Background())
+	policyLoader(policy_meta_rego)
+	policy_meta_query, err := policy_meta_rego.PrepareForEval(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	policy_list_result, err := policy_list_query.Eval(context.Background())
+	policy_meta_result, err := policy_meta_query.Eval(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	policy_list := make([]string, len(policy_list_result[0].Bindings["policies"].([]interface{})))
-	for i, policy := range policy_list_result[0].Bindings["policies"].([]interface{}) {
+	if !policy_meta_result[0].Bindings["meta_policy_ok"].(bool) {
+		if pretty_output, err := json.Marshal(policy_meta_result[0].Bindings); err != nil {
+			return nil, fmt.Errorf("meta-policy validation failed and unable to serialize output to JSON (%s): %v", err, policy_meta_result[0].Bindings)
+		} else {
+			return nil, fmt.Errorf("meta-policy validation failed: %s", pretty_output)
+		}
+	}
+	policy_list := make([]string, len(policy_meta_result[0].Bindings["all_policies"].([]interface{})))
+	for i, policy := range policy_meta_result[0].Bindings["all_policies"].([]interface{}) {
 		policy_list[i] = policy.(string)
 	}
 	for _, policy := range policy_list {

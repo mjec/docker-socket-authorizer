@@ -14,24 +14,19 @@ var (
 	Evaluator *RegoEvaluator = nil
 )
 
-// This query MUST produce the following outputs for handlers/authorizer.go to work at all:
-// - ok: boolean, true if the request is approved
+// NOTE: if you are changing the QUERY or META_POLICY, please ensure HACKING.md is also updated to reflect your changes.
+
+// This query produces the following outputs that govern program behavior:
+// - ok: boolean, true if and only if the request is approved
+// - meta_policy_ok: boolean, true if and only if the meta-policy passes
+// - all_policies: []string, a list of the names of policies that are loaded under the `docker_socket_authorizer` namespace
 // - to_store: map[string]interface{}, a map from policy to data to store for that policy
-//
-// The following SHOULD to be available for logging in handlers/authorizer.go:
-// - denies: map[string][string], the deny messages from each policy
-// - allows: map[string][string], the allow messages from each policy
-// - skips: map[string][string], the skip messages from each policy
-// - invalid_policies: set, the names of all policies that fail to produce both a message and valid result (deny/skip/allow)
-// - invalid_storage: set, the names of all policies that have invalid storage
-//
-// We also assert the following, which is guaranteed by the meta policy:
-//
-//	count(all_policies) == count(denies) + count(allows) + count(skips) + count(invalid_policies)
-//
-// That assertion is fundamental: all valid policies must produce exactly one of those three results.
-// Although we check that in the meta policy, we also check it here to ensure that the query is safe
-// even if the meta policy contains a bug.
+// This query also produces the following outputs that are used for logging:
+// - denies: map[string]string, a map from policy to message for each policy with a result of "deny"
+// - allows: map[string]string, a map from policy to message for each policy with a result of "allow"
+// - skips: map[string]string, a map from policy to message for each policy with a result of "skip"
+// - invalid_policies: []string, a list of policy names that do not produce a valid `result` and `message`
+// - invalid_storage: []string, a list of policy names that do not produce a valid `to_store` object
 const QUERY = `
 denies = {policy: data.docker_socket_authorizer[policy].message | data.docker_socket_authorizer[policy].result == "deny"}
 allows = {policy: data.docker_socket_authorizer[policy].message | data.docker_socket_authorizer[policy].result == "allow"}
@@ -39,14 +34,30 @@ skips = {policy: data.docker_socket_authorizer[policy].message | data.docker_soc
 
 invalid_policies = data.docker_socket_meta_policy.invalid_policies
 invalid_storage = data.docker_socket_meta_policy.invalid_storage
+all_policies = data.docker_socket_meta_policy.all_policies
+meta_policy_ok = data.docker_socket_meta_policy.ok
 
 to_store = {policy: data.docker_socket_authorizer[policy].to_store | true}
-ok = count({x | [count(invalid_policies) == 0, count(denies) == 0, count(allows) > 0][x] == true}) == 3
 
-# Baseline legitimacy check: all policies should have a result of allow, deny or skip; or be invalid
+ok_conditions = {
+	"meta-policy passes": meta_policy_ok,
+	"no invalid policies": count(invalid_policies) == 0,
+	"no invalid storages": count(invalid_storage) == 0,
+	"no denials": count(denies) == 0,
+	"at least one allow": count(allows) > 0,
+}
+ok = count({x | ok_conditions[x] == true}) == count(ok_conditions)
+
+# Baseline legitimacy check: all policies should have a result of allow, deny or skip; or be invalid.
+# We explicitly construct the list of policies, rather than relying on all_policies, which is calculated by the meta-policy.
 count({policy | data.docker_socket_authorizer[policy]}) == count(denies) + count(allows) + count(skips) + count(invalid_policies)
 `
 
+// This policy produces the following outputs that govern program behavior:
+// ok: boolean, true if and only if the meta-policy passes
+// all_policies: []string, a list of the names of policies that are loaded under the `docker_socket_authorizer` namespace
+// invalid_policies: []string, a list of policy names that do not produce a valid `result` and `message`
+// invalid_storage: []string, a list of policy names that do not produce a valid `to_store` object
 const META_POLICY = `
 package docker_socket_meta_policy
 

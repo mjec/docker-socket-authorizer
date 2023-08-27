@@ -218,7 +218,7 @@ As a result, `data.docker_socket_authorizer_storage.evaluation_counter.count` wi
 
 Stored values are reset whenever the application is restarted or new policies are loaded.
 
-To be valid, `to_store` must always be a map with string keys. As such, using `to_store["key_name"]` is idiomatic. Attempting to store scalars directly into `to_store` will fail the meta policy:
+To be valid, `to_store` must always be a map with string keys. As such, using `to_store["key_name"]` is idiomatic. Attempting to store scalars directly into `to_store` will fail the meta-policy:
 
 ```rego
 to_store := 1 { # WRONG

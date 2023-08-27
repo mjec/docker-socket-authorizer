@@ -22,12 +22,6 @@ message = "Original method not set" {
     not "original_method" in object.keys(input)
 }
 
-store = {
-    "count": 1,
-} {
-    result == "skip"
-}
-
 # Tests
 test_allow_if_method_is_get {
     # Not case sensitive

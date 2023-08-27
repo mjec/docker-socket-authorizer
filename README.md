@@ -11,13 +11,15 @@ This thing is not complete. It is approximately functional.
 ### Release blockers
 
 - [ ] Tests for go
-- [ ] Storage (this currently does not work at all)
 - [ ] Structured logs
 - [ ] Tracing
 - [ ] Better metrics configuration and documentation
 - [ ] Configuration (marked as `@CONFIG`)
 - [ ] Additional functions, e.g. `dockerHost("watchtower")` becomes `watchtower.docker_net_name.` where `docker_net_name` is set by environment variable or config
+- [ ] add (some) config to input, producing `input.config`
 - [ ] CI, code of conduct
+- [ ] Listen on unix socket (but prometheus remains on tcp?)
+- [ ] rDNS timeout
 
 ### Decisions to  be made
 
@@ -25,6 +27,7 @@ This thing is not complete. It is approximately functional.
 - [ ] Should introspection be only through an endpoint? Could curl instead of `introspect`
 - [ ] What do I call this thing? Is it really docker-specific enough to have this name? (no) Maybe opa-nginx or something?
 - [ ] Should this be a pass-through proxy instead of an authorization agent? I think no, though that would give us the body of every request
+- [ ] Should rDNS be configurable? I mean, it should definitely be disable-able, but should you be able to set servers or other resolver options? Timeouts?
 
 ## Quick start
 
@@ -33,11 +36,12 @@ This thing is not complete. It is approximately functional.
 ```nginx
 location / {
     auth_request /authorization;
+    proxy_pass http://unix:/var/run/docker.sock:/;
 }
 
 location /authorization {
     internal;
-    proxy_pass http://authorizer:8080/authorize
+    proxy_pass http://authorizer:8080/authorize;
     proxy_pass_request_body off;
     proxy_set_header Content-Length "";
     proxy_set_header X-Original-URI $request_uri;
@@ -158,13 +162,13 @@ All policies are always evaluated in [strict mode](https://www.openpolicyagent.o
 
 ### Output variables
 
-Every `docker_socket_authorizer` policy must produce `result` and `message` variables, and may set a `store` variable as well.
+Every `docker_socket_authorizer` policy must produce `result` and `message` variables, and may set a `to_store` variable as well.
 
 Variable | Type | Description
 -------- | ---- | -----------
 `result` | string | Must be one of `allow`, `skip` or `deny` (case sensitive)
 `message` | string | Must be a non-empty string explaining the reason for the result
-`store` | object\|undefined | If set, will be stored persistently and made available to subsequent policy runs
+`to_store` | object\|undefined | If set, will be made available to subsequent evaluations as `data.docker_socket_authorizer_storage.$policy` (where `$policy` is the policy name under `docker_socket_authorizer`)
 
 These requirements are enforced by a meta-policy that cannot be disabled.
 
@@ -186,9 +190,41 @@ Changing available inputs requires changing the code; for more see [HACKING.md](
 
 ### Storing state
 
-The `store` variable for a given policy will be persisted across policy loads.
+The `to_store` variable for a given policy will be persisted across policy evaluations, where it will be made available as `data.docker_socket_authorizer_storage.$policy` (where `$policy` is the policy name under `docker_socket_authorizer`).
 
-TODO: add storage docs
+#### Example
+
+Consider this policy:
+
+```rego
+package docker_socket_authorizer.evaluation_counter
+
+result := "skip"
+message := concat("", ["Count of policy evaluations: ", format_int(to_store["count"], 10)])
+default to_store["count"] := 1
+
+to_store["count"] = data.docker_socket_authorizer_storage.evaluation_counter.count + 1 {
+    true
+}
+```
+
+The value of `to_store["count"]` defaults to 1. That means that if nothing else sets that, the next time this policy is evaluated `data.docker_socket_authorizer_storage.evaluation_counter.count` will be equal to `1`.
+
+We do set the value of `to_store["count"]` to `data.docker_socket_authorizer_storage.evaluation_counter.count + 1`. This is only satisfiable if `data.docker_socket_authorizer_storage.evaluation_counter.count` has a value, which means we stored it last time.
+
+As a result, `data.docker_socket_authorizer_storage.evaluation_counter.count` will increase by one on every evaluation. The current evaluation counter (which starts at 1 on the first evaluation) is the value in `to_store["count"]`, so we include that in the message.
+
+#### Caveats
+
+Stored values are reset whenever the application is restarted or new policies are loaded.
+
+To be valid, `to_store` must always be a map with string keys. As such, using `to_store["key_name"]` is idiomatic. Attempting to store scalars directly into `to_store` will fail the meta policy:
+
+```rego
+to_store := 1 { # WRONG
+    true
+}
+```
 
 ### Tests
 

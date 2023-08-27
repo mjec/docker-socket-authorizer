@@ -1,20 +1,22 @@
 package internal
 
 import (
-	"context"
 	"log"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/topdown"
+)
+
+var (
+	Evaluator *RegoEvaluator = nil
 )
 
 // This query MUST produce the following outputs for handlers/authorizer.go to work at all:
 // - ok: boolean, true if the request is approved
-// - to_store: map[string]interface{}, the store to use for the request
+// - to_store: map[string]interface{}, a map from policy to data to store for that policy
 //
 // The following SHOULD to be available for logging in handlers/authorizer.go:
 // - denies: map[string][string], the deny messages from each policy
@@ -38,7 +40,7 @@ skips = {policy: data.docker_socket_authorizer[policy].message | data.docker_soc
 invalid_policies = data.docker_socket_meta_policy.invalid_policies
 invalid_storage = data.docker_socket_meta_policy.invalid_storage
 
-to_store = {policy: {"store": data.docker_socket_authorizer[policy].store } | true}
+to_store = {policy: data.docker_socket_authorizer[policy].to_store | true}
 ok = count({x | [count(invalid_policies) == 0, count(denies) == 0, count(allows) > 0][x] == true}) == 3
 
 # Baseline legitimacy check: all policies should have a result of allow, deny or skip; or be invalid
@@ -66,9 +68,8 @@ deny_policies = { policy |
 ok_policies = union({allow_policies, skip_policies, deny_policies})
 
 invalid_storage = {policy |
-	data.docker_socket_authorizer[policy].store
-	not is_object(data.docker_socket_authorizer[policy].store)}
-
+	data.docker_socket_authorizer[policy].to_store
+	not is_object(data.docker_socket_authorizer[policy].to_store)}
 
 invalid_policies = all_policies - ok_policies
 
@@ -125,30 +126,13 @@ func LoadPolicies() error {
 	start_time := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
 
-	log.Printf("Loading policies\n")
-
-	new_rego_object := rego.New(
-		// TODO: @CONFIG policies directory
-		rego.Load([]string{"./policies/"}, nil),
-		rego.Query(QUERY),
-		rego.Module("docker_socket_meta_policy", META_POLICY),
-		// TODO: @CONFIG print mode
-		rego.EnablePrintStatements(true),
-		rego.PrintHook(topdown.NewPrintHook(os.Stdout)),
-		// TODO: @CONFIG strict mode?
-		rego.Strict(true),
-		//  TODO: store
-		//		- partition by docker_socket_authorizer/policy?
-		//		- inmem or disk?
-		// rego.Store(store),
-	)
-	query, err := new_rego_object.PrepareForEval(context.Background())
+	// TODO: @CONFIG policies directory
+	e, err := NewEvaluator(rego.Load([]string{"./policies/"}, nil))
 	if err != nil {
 		return err
 	}
-
-	RegoObject = new_rego_object
-	Authorizer = &query
+	Evaluator = e
+	log.Printf("Policies loaded successfully: %s\n", strings.Join(e.policyList, ", "))
 
 	o11y.Metrics.PolicyLoads.Inc()
 	return nil

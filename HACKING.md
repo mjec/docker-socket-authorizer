@@ -41,8 +41,7 @@ Variable | Type | Description
 `denies` | map\[string\]string | A map from policy to message for each policy with a result of "deny"
 `allows` | map\[string\]string | A map from policy to message for each policy with a result of "allow"
 `skips` | map\[string\]string | A map from policy to message for each policy with a result of "skip"
-`invalid_policies` | []string | A list of policy names that do not produce a valid `result` and `message`
-`invalid_storage` | []string | A list of policy names that do not produce a valid `to_store` object
+`ok_conditions` | map\[string\]bool | A map from success condition to whether or not that condition passed
 
 ## Updating the meta-policy
 

@@ -11,7 +11,6 @@ This thing is not complete. It is approximately functional.
 ### Release blockers
 
 - [ ] Tests for go
-- [ ] Structured logs
 - [ ] Tracing
 - [ ] Better metrics configuration and documentation
 - [ ] Configuration (marked as `@CONFIG`)
@@ -110,9 +109,29 @@ TODO: observability docs
 
 ### Logs
 
-TODO: add structured logs
+Logs are written to stderr as JSON lines with standard [`slog`](https://pkg.go.dev/log/slog) structure.
 
-TODO: document values in logs (especially `input` and `result`)
+Of particular interest are info log lines with `msg` of `Request processed`. These represent calls to `/authorize` where we did not encounter an error. They include the following values:
+
+Variable | Type | Description
+-------- | ---- | -----------
+`ok` | boolean | `true` if and only if the request was approved, false otherwise
+`input` | map\[string\]interface{} | The set of inputs used to evaluate this request (matches [Available Inputs](#available-inputs))
+`result` | map\[string\]interface{} | The set of results of evaluating this request
+
+The properties of `result` include:
+
+Variable | Type | Description
+-------- | ---- | -----------
+`all_policies` | []string | A list of the names of policies that were evaluated under the `docker_socket_authorizer` namespace
+`denies` | map\[string\]string | A map from policy to message for each policy with a result of "deny"
+`allows` | map\[string\]string | A map from policy to message for each policy with a result of "allow"
+`skips` | map\[string\]string | A map from policy to message for each policy with a result of "skip"
+`ok_conditions` | map\[string\]bool | A map from success condition to whether or not that condition passed
+
+Other properties may exist, and you should not rely on this list being exhaustive. For more, see [HACKING.md](HACKING.md#updating-the-query).
+
+TODO: @CONFIG logging
 
 ### Metrics
 

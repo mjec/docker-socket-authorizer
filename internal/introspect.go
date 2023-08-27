@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"golang.org/x/exp/slog"
 )
 
 func Introspect(arg string) {
@@ -27,7 +29,9 @@ func Introspect(arg string) {
 			RemoteAddrNames: make([]string, 0),
 		})
 		if err != nil {
-			log.Fatalf("Error marshalling empty input: %s\n", err)
+			slog.Error("Unable to convert empty input to JSON", slog.Any("error", err))
+			// Using log.Fatal() here isn't ideal; but I think we're going to get rid of this whole file anyway.
+			log.Fatal("Unable to convert empty input to JSON")
 		}
 		fmt.Printf("%s\n", j)
 		os.Exit(0)

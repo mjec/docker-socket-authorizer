@@ -3,22 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/mjec/docker-socket-authorizer/internal"
+	"golang.org/x/exp/slog"
 )
 
 func Reflect(w http.ResponseWriter, r *http.Request) {
 	input, err := internal.MakeInput(r)
 	if err != nil {
+		slog.Error("Error making input", slog.Any("error", err))
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintln(w, "Invalid request")
-		return
-	}
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintln(w, "Forbidden")
 		return
 	}
 	w.Header().Add("content-type", "application/json")
@@ -26,7 +22,7 @@ func Reflect(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintln(w, "Unable to marshal input")
-		log.Printf("Unable to marshal input: %s\n", err)
+		slog.Error("Unable to marshal input to JSON", slog.Any("error", err))
 		return
 	}
 	fmt.Fprintf(w, "%s\n", j)

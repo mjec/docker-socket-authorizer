@@ -1,13 +1,12 @@
 package internal
 
 import (
-	"log"
-	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/open-policy-agent/opa/rego"
+	"golang.org/x/exp/slog"
 )
 
 var (
@@ -94,7 +93,8 @@ ok {
 func WatchPolicies() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to establish policy watcher", slog.Any("error", err))
+		return
 	}
 	defer watcher.Close()
 
@@ -103,32 +103,35 @@ func WatchPolicies() {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
-					log.Printf("Watcher event channel closed\n")
+					// TODO: should this be an error? How do we react when file watcher is closed?
+					slog.Debug("Watcher event channel closed")
 					return
 				}
 				// exclude fsnotify.Chmod events, which can be common and don't necessarily imply we need to reevaluate the policies
 				if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Write) || event.Has(fsnotify.Rename) {
-					log.Printf("File change detected: %s\n", event.Name)
+					slog.Info("File change detected", slog.String("file", event.Name), slog.String("change", event.Op.String()))
 					err := LoadPolicies()
 					if err != nil {
-						log.Printf("Unable to reload policies: %s", err)
+						slog.Error("Unable to reload policies", slog.Any("error", err))
 					}
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
-					log.Printf("Watcher error channel closed\n")
+					// TODO: should this be an error? How do we react when file watcher is closed?
+					slog.Debug("Watcher error channel closed")
 					return
 				}
-				log.Printf("Error in file watcher: %s\n", err)
+				slog.Error("Error in policy watcher", slog.Any("error", err))
 			}
 		}
 	}()
 
 	err = watcher.Add("./policies/") // TODO: @CONFIG policies directory
 	if err != nil {
-		log.Fatalf("Unable to add watcher to policies directory: %s", err)
+		slog.Error("Unable to establish policy watcher", slog.Any("error", err))
+		return
 	}
-	log.Printf("Setting up policy watcher: %v\n", watcher.WatchList())
+	slog.Info("Established policy watcher", slog.Any("watched", watcher.WatchList()))
 
 	<-make(chan struct{})
 }
@@ -143,7 +146,18 @@ func LoadPolicies() error {
 		return err
 	}
 	Evaluator = e
-	log.Printf("Policies loaded successfully: %s\n", strings.Join(e.policyList, ", "))
+
+	// List all the modules except docker_socket_meta_policy
+	module_list := make([]string, len(e.authorizer.Modules())-1)
+	i := 0
+	for key := range e.authorizer.Modules() {
+		if key == "docker_socket_meta_policy" {
+			continue
+		}
+		module_list[i] = key
+		i++
+	}
+	slog.Info("Policies loaded successfully", slog.Any("policies", e.policyList), slog.Any("files_evaluated", module_list))
 
 	o11y.Metrics.PolicyLoads.Inc()
 	return nil

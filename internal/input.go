@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -55,13 +54,11 @@ func rdns(ip string) ([]string, error) {
 
 	reverse_names, err := net.LookupAddr(ip)
 	if err != nil {
-		log.Printf("rDNS error (%s): %s\n", ip, err)
 		return nil, err
 	}
 	for _, name := range reverse_names {
 		forward_ips, err := net.LookupHost(name)
 		if err != nil {
-			log.Printf("Forward DNS error (%s): %s\n", ip, err)
 			return nil, err
 		}
 		for _, resolved_ip := range forward_ips {

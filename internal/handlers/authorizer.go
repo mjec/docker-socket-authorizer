@@ -39,16 +39,6 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		"result": result_set[0].Bindings,
 	})
 
-	// NOTE: do NOT use `result_set.Allowed()`!
-	// The query is not set up for that. Always explicitly check the `ok` output.
-	if !result_set[0].Bindings["ok"].(bool) {
-		log.Printf("Request denied: %s\n", debug_info)
-		o11y.Metrics.Denied.Inc()
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintln(w, "Forbidden")
-		return
-	}
-
 	if err := evaluator.WriteToStorage(r.Context(), result_set[0].Bindings["to_store"].(map[string]interface{})); err != nil {
 		log.Printf("Error writing to storage: %s\n", err)
 		// TODO: should this return a 500 instead?
@@ -59,8 +49,19 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	o11y.Metrics.Approved.Inc()
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "OK")
-	log.Printf("Request approved: %s\n", debug_info)
+	// NOTE: do NOT use `result_set.Allowed()`!
+	// The query is not set up for that. Always explicitly check the `ok` output.
+	if result_set[0].Bindings["ok"].(bool) {
+		o11y.Metrics.Approved.Inc()
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "OK")
+		log.Printf("Request approved: %s\n", debug_info)
+		return
+	}
+
+	// deny by default (in particular, in case we forgot a `return` somewhere above)
+	log.Printf("Request denied: %s\n", debug_info)
+	o11y.Metrics.Denied.Inc()
+	w.WriteHeader(http.StatusForbidden)
+	fmt.Fprintln(w, "Forbidden")
 }

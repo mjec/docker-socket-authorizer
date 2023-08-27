@@ -98,13 +98,15 @@ func WatchPolicies() {
 	}
 	defer watcher.Close()
 
+	shutdown_policy_watcher := make(chan struct{})
+
 	go func() {
 		for {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
-					// TODO: should this be an error? How do we react when file watcher is closed?
 					slog.Debug("Watcher event channel closed")
+					shutdown_policy_watcher <- struct{}{}
 					return
 				}
 				// exclude fsnotify.Chmod events, which can be common and don't necessarily imply we need to reevaluate the policies
@@ -117,8 +119,8 @@ func WatchPolicies() {
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
-					// TODO: should this be an error? How do we react when file watcher is closed?
 					slog.Debug("Watcher error channel closed")
+					shutdown_policy_watcher <- struct{}{}
 					return
 				}
 				slog.Error("Error in policy watcher", slog.Any("error", err))
@@ -133,7 +135,8 @@ func WatchPolicies() {
 	}
 	slog.Info("Established policy watcher", slog.Any("watched", watcher.WatchList()))
 
-	<-make(chan struct{})
+	<-shutdown_policy_watcher
+	slog.Info("Shut down policy watcher")
 }
 
 func LoadPolicies() error {

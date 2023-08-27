@@ -116,6 +116,13 @@ func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]
 	if err != nil {
 		return err
 	}
+	// We have to do this nonsense to avoid aborting a stale transaction; though doing that is preferable to returning with a hanging transaction
+	transaction_is_committed := false
+	defer func() {
+		if !transaction_is_committed {
+			(*r.store).Abort(context.Background(), transaction)
+		}
+	}()
 
 	for policy, to_store := range to_store {
 		if path, ok := storage.ParsePath("/docker_socket_authorizer_storage/" + policy); !ok {
@@ -128,6 +135,7 @@ func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]
 	if err := (*r.store).Commit(ctx, transaction); err != nil {
 		return err
 	}
+	transaction_is_committed = true
 
 	return nil
 }

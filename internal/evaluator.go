@@ -29,7 +29,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		return nil, err
 	}
 
-	// We have to do this nonsense to avoid aborting a stale transaction
+	// We have to do this nonsense to avoid aborting a stale transaction; though doing that is preferable to returning with a hanging transaction
 	transaction_is_committed := false
 	defer func() {
 		if !transaction_is_committed {

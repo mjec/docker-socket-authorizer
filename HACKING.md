@@ -32,7 +32,7 @@ Variable | Type | Description
 `all_policies` | []string | A list of the names of policies that are loaded under the `docker_socket_authorizer` namespace
 `to_store` | map\[string\]interface{} | A map from policy to data to store for that policy
 
-These outputs are used in `internal/evaluator.go` and `internal./handlers/authorizer.go`.
+These outputs are used in `internal/evaluator.go` and `internal/handlers/authorizer.go`.
 
 We also document the following outputs as existing for logging purposes, but changes to those outputs will only affect logging and not the correct operation of the system:
 

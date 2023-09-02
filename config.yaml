@@ -14,7 +14,7 @@ policy:
         - ./policies
     print_enabled: true
     strict_mode: true
-    watch_directories: false
+    watch_directories: true
 reflection:
     enabled: true
 reload: # determines what the /reload endpoint does

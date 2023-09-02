@@ -12,9 +12,10 @@ import (
 
 func ReflectionHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"input":       ifEnabled(inputHandler),
-		"query":       ifEnabled(queryHandler),
-		"meta-policy": ifEnabled(metaPolicyHandler),
+		"input":         ifEnabled(inputHandler),
+		"query":         ifEnabled(queryHandler),
+		"meta-policy":   ifEnabled(metaPolicyHandler),
+		"configuration": ifEnabled(configHandler),
 	}
 }
 
@@ -33,17 +34,19 @@ func inputHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("Error making input", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Add("content-type", "text/plain")
 		fmt.Fprintln(w, "Unable to construct input")
 		return
 	}
-	w.Header().Add("content-type", "application/json")
 	j, err := json.MarshalIndent(input, "", "  ")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, "Unable to marshal input")
 		slog.Error("Unable to marshal input to JSON", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Add("content-type", "text/plain")
+		fmt.Fprintln(w, "Unable to marshal input")
 		return
 	}
+	w.Header().Add("content-type", "application/json")
 	fmt.Fprintf(w, "%s\n", j)
 }
 
@@ -55,4 +58,18 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 func metaPolicyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", "text/plain")
 	fmt.Fprintf(w, "%s", internal.META_POLICY)
+}
+
+func configHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", "application/json")
+	j, err := json.MarshalIndent(viper.AllSettings(), "", "  ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Add("content-type", "text/plain")
+		fmt.Fprintln(w, "Unable to marshal input")
+		slog.Error("Unable to marshal input to JSON", slog.Any("error", err))
+		return
+	}
+	w.Header().Add("content-type", "application/json")
+	fmt.Fprintf(w, "%s\n", j)
 }

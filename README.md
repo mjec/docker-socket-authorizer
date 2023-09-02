@@ -15,10 +15,12 @@ This thing is not complete. It is approximately functional.
 - [ ] Better metrics configuration and documentation
 - [ ] Configuration (marked as `@CONFIG`)
 - [ ] Additional functions, e.g. `dockerHost("watchtower")` becomes `watchtower.docker_net_name.` where `docker_net_name` is set by environment variable or config
-- [ ] add (some) config to input, producing `input.config`
+- [ ] Refactor `input`: `input.request`, `input.config` etc
+- [ ] Make `rdns` a built-in function, rather than applying it to all inputs in the application (this can be done in policy instead)
 - [ ] CI, code of conduct
 - [ ] Listen on unix socket (but prometheus remains on tcp?)
 - [ ] rDNS timeout
+- [ ] Make query just `ok` and permit configuring query and meta-policy
 
 ### Decisions to  be made
 

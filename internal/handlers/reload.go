@@ -14,6 +14,8 @@ func Reload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: reload config from viper, somehow. Need to restart policy watcher too if appropriate (see main.go:configurePolicyWatcher() for more)
+
 	if err := internal.LoadPolicies(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Error loading policies: %s\n", err)

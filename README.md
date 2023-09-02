@@ -23,7 +23,6 @@ This thing is not complete. It is approximately functional.
 ### Decisions to  be made
 
 - [ ] Extensible input, maybe? So like, easier to define new inputs, maybe even with some kind of plugin
-- [ ] Should introspection be only through an endpoint? Could curl instead of `introspect`
 - [ ] What do I call this thing? Is it really docker-specific enough to have this name? (no) Maybe opa-nginx or something?
 - [ ] Should this be a pass-through proxy instead of an authorization agent? I think no, though that would give us the body of every request
 - [ ] Should rDNS be configurable? I mean, it should definitely be disable-able, but should you be able to set servers or other resolver options? Timeouts?

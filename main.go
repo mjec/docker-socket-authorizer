@@ -18,10 +18,6 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
-	if len(os.Args) == 3 && os.Args[1] == "introspect" {
-		internal.Introspect(os.Args[2])
-	}
-
 	if err := internal.LoadPolicies(); err != nil {
 		slog.Error("Unable to load policies", slog.Any("error", err))
 		os.Exit(1)
@@ -29,7 +25,9 @@ func main() {
 	// TODO: @CONFIG determine whether to watch files
 	go internal.WatchPolicies()
 
-	http.HandleFunc("/reflect", handlers.Reflect)
+	for path, handler := range handlers.ReflectionHandlers() {
+		http.HandleFunc("/reflection/"+path, handler)
+	}
 	http.HandleFunc("/reload", handlers.Reload)
 	http.HandleFunc("/authorize", handlers.Authorize)
 	http.Handle("/metrics", promhttp.Handler())

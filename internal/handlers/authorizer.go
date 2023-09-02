@@ -6,6 +6,7 @@ import (
 
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
+	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 
 	"github.com/open-policy-agent/opa/rego"
@@ -20,7 +21,13 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Internal Server Error")
 		return
 	}
-	contextualLogger := slog.With(slog.Any("input", input))
+	var contextualLogger *slog.Logger
+	if viper.GetBool("log.input") {
+		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
+		contextualLogger = slog.With(slog.Any("input", input))
+	} else {
+		contextualLogger = slog.With()
+	}
 
 	// It's important we clone the pointer here! Otherwise we'll be racing with policy reloads
 	evaluator := internal.Evaluator
@@ -34,7 +41,12 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contextualLogger = contextualLogger.With(slog.Any("result", result_set[0].Bindings))
+	if viper.GetBool("log.detailed_result") {
+		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
+		contextualLogger = contextualLogger.With(slog.Any("result", result_set[0].Bindings))
+	} else {
+		contextualLogger = slog.With()
+	}
 
 	if err := evaluator.WriteToStorage(r.Context(), result_set[0].Bindings["to_store"].(map[string]interface{})); err != nil {
 		contextualLogger.Error("Error writing to storage", slog.Any("error", err))

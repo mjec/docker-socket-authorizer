@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	Evaluator *RegoEvaluator = nil
+	Evaluator           *RegoEvaluator = nil
+	GlobalPolicyWatcher *PolicyWatcher = nil
 )
 
 // NOTE: if you are changing the QUERY or META_POLICY, please ensure HACKING.md is also updated to reflect your changes.
@@ -98,10 +99,6 @@ type PolicyWatcher struct {
 
 func (pw *PolicyWatcher) Close() {
 	pw.shutdown_channel <- struct{}{}
-	err := LoadPolicies()
-	if err != nil {
-		slog.Error("Unable to reload policies", slog.Any("error", err))
-	}
 }
 
 func WatchPolicies() (*PolicyWatcher, error) {
@@ -143,7 +140,6 @@ func handlePolicyFileChange(watcher *fsnotify.Watcher, shutdown_policy_watcher c
 		case event, ok := <-watcher.Events:
 			if !ok {
 				slog.Debug("Watcher event channel closed")
-				shutdown_policy_watcher <- struct{}{}
 				return
 			}
 			// exclude fsnotify.Chmod events, which can be common and don't necessarily imply we need to reevaluate the policies
@@ -157,7 +153,6 @@ func handlePolicyFileChange(watcher *fsnotify.Watcher, shutdown_policy_watcher c
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				slog.Debug("Watcher error channel closed")
-				shutdown_policy_watcher <- struct{}{}
 				return
 			}
 			slog.Error("Error in policy watcher", slog.Any("error", err))

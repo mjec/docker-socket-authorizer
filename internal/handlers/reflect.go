@@ -6,14 +6,25 @@ import (
 	"net/http"
 
 	"github.com/mjec/docker-socket-authorizer/internal"
+	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
 
 func ReflectionHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"input":       inputHandler,
-		"query":       queryHandler,
-		"meta-policy": metaPolicyHandler,
+		"input":       ifEnabled(inputHandler),
+		"query":       ifEnabled(queryHandler),
+		"meta-policy": ifEnabled(metaPolicyHandler),
+	}
+}
+
+func ifEnabled(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !viper.GetBool("reflection.enabled") {
+			http.NotFound(w, r)
+			return
+		}
+		handler(w, r)
 	}
 }
 
@@ -21,8 +32,8 @@ func inputHandler(w http.ResponseWriter, r *http.Request) {
 	input, err := internal.MakeInput(r)
 	if err != nil {
 		slog.Error("Error making input", slog.Any("error", err))
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "Invalid request")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Unable to construct input")
 		return
 	}
 	w.Header().Add("content-type", "application/json")

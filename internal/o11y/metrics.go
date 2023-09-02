@@ -8,6 +8,7 @@ import (
 var Metrics = struct {
 	Approved        prometheus.Counter
 	Denied          prometheus.Counter
+	Errors          prometheus.Counter
 	PolicyLoads     prometheus.Counter
 	PolicyLoadTimer prometheus.Histogram
 }{
@@ -18,6 +19,10 @@ var Metrics = struct {
 	Denied: promauto.NewCounter(prometheus.CounterOpts{
 		Name: "docker_sock_authorizer_denied",
 		Help: "The total number of denied requests",
+	}),
+	Errors: promauto.NewCounter(prometheus.CounterOpts{
+		Name: "docker_sock_authorizer_errors",
+		Help: "The total number of requests resulting in an internal server error",
 	}),
 	PolicyLoads: promauto.NewCounter(prometheus.CounterOpts{
 		Name: "docker_sock_authorizer_configuration_loads",

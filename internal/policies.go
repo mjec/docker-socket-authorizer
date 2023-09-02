@@ -4,13 +4,15 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/open-policy-agent/opa/rego"
 	"golang.org/x/exp/slog"
 )
 
 var (
-	Evaluator *RegoEvaluator = nil
+	Evaluator           *RegoEvaluator = nil
+	GlobalPolicyWatcher *PolicyWatcher = nil
 )
 
 // NOTE: if you are changing the QUERY or META_POLICY, please ensure HACKING.md is also updated to reflect your changes.
@@ -90,61 +92,79 @@ ok {
 }
 `
 
-func WatchPolicies() {
+type PolicyWatcher struct {
+	watcher          *fsnotify.Watcher
+	shutdown_channel chan struct{}
+}
+
+func (pw *PolicyWatcher) Close() {
+	pw.shutdown_channel <- struct{}{}
+}
+
+func WatchPolicies() (*PolicyWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		slog.Error("Unable to establish policy watcher", slog.Any("error", err))
-		return
+		return nil, err
 	}
-	defer watcher.Close()
 
 	shutdown_policy_watcher := make(chan struct{})
 
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					slog.Debug("Watcher event channel closed")
-					shutdown_policy_watcher <- struct{}{}
-					return
-				}
-				// exclude fsnotify.Chmod events, which can be common and don't necessarily imply we need to reevaluate the policies
-				if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Write) || event.Has(fsnotify.Rename) {
-					slog.Info("File change detected", slog.String("file", event.Name), slog.String("change", event.Op.String()))
-					err := LoadPolicies()
-					if err != nil {
-						slog.Error("Unable to reload policies", slog.Any("error", err))
-					}
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					slog.Debug("Watcher error channel closed")
-					shutdown_policy_watcher <- struct{}{}
-					return
-				}
-				slog.Error("Error in policy watcher", slog.Any("error", err))
-			}
-		}
-	}()
+	go handlePolicyFileChange(watcher, shutdown_policy_watcher)
+	go handlePolicyWatcherClose(watcher, shutdown_policy_watcher)
 
-	err = watcher.Add("./policies/") // TODO: @CONFIG policies directory
-	if err != nil {
-		slog.Error("Unable to establish policy watcher", slog.Any("error", err))
-		return
+	for _, dir := range cfg.Configuration.Policy.Directories {
+		err = watcher.Add(dir)
+		if err != nil {
+			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
+			shutdown_policy_watcher <- struct{}{}
+			return nil, err
+		}
 	}
 	slog.Info("Established policy watcher", slog.Any("watched", watcher.WatchList()))
 
+	return &PolicyWatcher{
+		watcher:          watcher,
+		shutdown_channel: shutdown_policy_watcher,
+	}, nil
+}
+
+func handlePolicyWatcherClose(watcher *fsnotify.Watcher, shutdown_policy_watcher chan struct{}) {
 	<-shutdown_policy_watcher
-	slog.Info("Shut down policy watcher")
+	watcher.Close()
+	slog.Info("Shutting down policy watcher")
+}
+
+func handlePolicyFileChange(watcher *fsnotify.Watcher, shutdown_policy_watcher chan struct{}) {
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				slog.Debug("Watcher event channel closed")
+				return
+			}
+			// exclude fsnotify.Chmod events, which can be common and don't necessarily imply we need to reevaluate the policies
+			if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Write) || event.Has(fsnotify.Rename) {
+				slog.Info("File change detected", slog.String("file", event.Name), slog.String("change", event.Op.String()))
+				err := LoadPolicies()
+				if err != nil {
+					slog.Error("Unable to reload policies", slog.Any("error", err))
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				slog.Debug("Watcher error channel closed")
+				return
+			}
+			slog.Error("Error in policy watcher", slog.Any("error", err))
+		}
+	}
 }
 
 func LoadPolicies() error {
 	start_time := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
 
-	// TODO: @CONFIG policies directory
-	e, err := NewEvaluator(rego.Load([]string{"./policies/"}, nil))
+	e, err := NewEvaluator(rego.Load(cfg.Configuration.Policy.Directories, nil))
 	if err != nil {
 		return err
 	}

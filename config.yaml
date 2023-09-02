@@ -1,0 +1,26 @@
+authorizer:
+    listener:
+        address: ./serve.sock       # changes to this value are ignored until restart
+        type: unix                  # changes to this value are ignored until restart
+        includes_metrics: true      # changes to this value are ignored until restart
+metrics:
+    enabled: false                  # cannot generally go false->true without restart but can go true->false and afterwards can also go false->true
+    listener:
+        address: :9100              # changes to this value are ignored until restart
+        type: tcp                   # changes to this value are ignored until restart
+    path: /metrics                  # changes to this value are ignored until restart
+policy:
+    directories:
+        - ./policies
+    print_enabled: true
+    strict_mode: true
+    watch_directories: true
+reflection:
+    enabled: true
+reload: # determines what the /reload endpoint does
+    policies: true
+    configuration: true             # WARNING: cannot go false->true without restart but CAN go true->false where it is then stuck
+log:
+    level: error
+    input: false
+    detailed_result: false # "ok" is always logged as a boolean field

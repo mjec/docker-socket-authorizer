@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
@@ -38,8 +39,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}()
 
 	policy_meta_rego := rego.New(
-		// TODO: @CONFIG strict mode?
-		rego.Strict(true),
+		rego.Strict(cfg.Configuration.Policy.StrictMode),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
@@ -72,16 +72,16 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}
 
 	new_rego_object := rego.New(
-		// TODO: @CONFIG print mode
-		rego.EnablePrintStatements(true),
-		rego.PrintHook(topdown.NewPrintHook(os.Stdout)),
-		// TODO: @CONFIG strict mode?
-		rego.Strict(true),
+		rego.Strict(cfg.Configuration.Policy.StrictMode),
 		rego.Store(store),
 		rego.Transaction(transaction),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
+	if cfg.Configuration.Policy.PrintEnabled {
+		rego.EnablePrintStatements(true)(new_rego_object)
+		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(new_rego_object)
+	}
 	policyLoader(new_rego_object)
 
 	query, err := new_rego_object.PrepareForEval(context.Background())
@@ -107,7 +107,7 @@ func (r *RegoEvaluator) EvaluateQuery(ctx context.Context, options ...rego.EvalO
 
 func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]interface{}) error {
 	// Store has gone stale, so we're free to ignore the write (if we execute it no harm, just wasted effort)
-	// WARNING: if we stop using inmem or stop resetting storage on reload (@CONFIG), this will break.
+	// WARNING: if we stop using inmem or stop resetting storage on reload, this will break.
 	if r.isStale() {
 		return nil
 	}

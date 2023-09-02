@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
-	"github.com/spf13/viper"
 )
 
 type RegoEvaluator struct {
@@ -39,7 +39,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}()
 
 	policy_meta_rego := rego.New(
-		rego.Strict(viper.GetBool("policy.strict_mode")),
+		rego.Strict(cfg.Configuration.Policy.StrictMode),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
@@ -72,13 +72,13 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}
 
 	new_rego_object := rego.New(
-		rego.Strict(viper.GetBool("policy.strict_mode")),
+		rego.Strict(cfg.Configuration.Policy.StrictMode),
 		rego.Store(store),
 		rego.Transaction(transaction),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
-	if viper.GetBool("policy.print_enabled") {
+	if cfg.Configuration.Policy.PrintEnabled {
 		rego.EnablePrintStatements(true)(new_rego_object)
 		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(new_rego_object)
 	}

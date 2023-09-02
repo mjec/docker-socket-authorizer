@@ -5,56 +5,26 @@ import (
 	"net/http"
 	"os"
 
-	// Once we upgrade to go 1.21 this will become "log/slog"
-	"golang.org/x/exp/slog"
-
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/handlers"
+	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/exp/slog"
 
 	"github.com/spf13/viper"
 )
 
 func main() {
-	viper.SetDefault("policy.directories", []string{"./policies"})
-	viper.SetDefault("policy.watch_directories", true)
-	viper.SetDefault("policy.strict_mode", true)
-	viper.SetDefault("policy.print_enabled", true)
-	viper.SetDefault("reflection.enabled", true)
-	viper.SetDefault("authorizer.listener.type", "unix")
-	viper.SetDefault("authorizer.listener.address", "./serve.sock")
-	viper.SetDefault("authorizer.listener.includes_metrics", false)
-	viper.SetDefault("metrics.enabled", true)
-	viper.SetDefault("metrics.path", "/metrics")
-	viper.SetDefault("metrics.listener.type", "tcp")
-	viper.SetDefault("metrics.listener.address", ":9100")
-	viper.SetDefault("log.level", "info")
-	viper.SetDefault("log.input", true)
-	viper.SetDefault("log.detailed_result", true)
-
-	viper.SetConfigName("config")
-	viper.AddConfigPath("/etc/docker-socket-authorizer/")
-	viper.AddConfigPath(".")
-
-	var logger *slog.Logger
-	err := viper.ReadInConfig()
+	cfg.InitializeConfiguration()
+	err := cfg.LoadConfiguration()
+	o11y.ConfigureLogger()
 	if err != nil {
-		// TODO: @CONFIG output to file instead of stderr
-		logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		slog.SetDefault(logger)
-		slog.Warn("Unable to locate config file; continuing with default settings", slog.Any("error", err))
-	} else {
-		lvl := slog.LevelInfo
-		if err := lvl.UnmarshalText([]byte(viper.GetString("log.level"))); err != nil {
-			// TODO: @CONFIG output to file instead of stderr
-			logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-			slog.SetDefault(logger)
-			slog.Error("Unable to parse log level", slog.Any("error", err))
-		} else {
-			// TODO: @CONFIG output to file instead of stderr
-			logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
-			slog.SetDefault(logger)
+		var contextualLogger *slog.Logger = slog.With(slog.Any("error", err))
+		if viper.ConfigFileUsed() == "" {
+			contextualLogger = contextualLogger.With(slog.String("file", viper.ConfigFileUsed()))
 		}
+		contextualLogger.Warn("Unable to load configuration file; continuing with default settings")
 	}
 
 	// Config cannot be gracefully reloaded; sorry.
@@ -69,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if viper.GetBool("policy.watch_directories") {
+	if cfg.Configuration.Policy.WatchDirectories {
 		if internal.GlobalPolicyWatcher, err = internal.WatchPolicies(); err != nil {
 			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
 		}
@@ -83,12 +53,12 @@ func main() {
 	serve_mux.HandleFunc("/reload", handlers.Reload)
 	serve_mux.HandleFunc("/authorize", handlers.Authorize)
 
-	if viper.GetBool("authorizer.listener.includes_metrics") {
-		serve_mux.Handle(viper.GetString("metrics.path"), ifMetricsEnabled(promhttp.Handler()))
+	if cfg.Configuration.Authorizer.IncludesMetrics {
+		serve_mux.Handle(cfg.Configuration.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 	}
 
-	if viper.GetString("metrics.listener.type") != "" && viper.GetString("metrics.listener.type") != "none" {
-		metrics_listener, err := net.Listen(viper.GetString("metrics.listener.type"), viper.GetString("metrics.listener.address"))
+	if cfg.Configuration.Metrics.Listener.Type != "" && cfg.Configuration.Metrics.Listener.Type != "none" {
+		metrics_listener, err := net.Listen(cfg.Configuration.Metrics.Listener.Type, cfg.Configuration.Metrics.Listener.Address)
 		if err != nil {
 			slog.Error("Unable to start metrics server", slog.Any("error", err))
 			os.Exit(1)
@@ -96,7 +66,7 @@ func main() {
 		defer metrics_listener.Close()
 
 		metrics_serve_mux := http.NewServeMux()
-		metrics_serve_mux.HandleFunc(viper.GetString("metrics.path"), ifMetricsEnabled(promhttp.Handler()))
+		metrics_serve_mux.HandleFunc(cfg.Configuration.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 
 		go func() {
 			slog.Error("Unable to start metrics server", slog.Any("reason", http.Serve(metrics_listener, metrics_serve_mux)))
@@ -105,19 +75,19 @@ func main() {
 
 	slog.Info("Server starting")
 
-	listener, err := net.Listen(viper.GetString("authorizer.listener.type"), viper.GetString("authorizer.listener.address"))
+	listener, err := net.Listen(cfg.Configuration.Authorizer.Listener.Type, cfg.Configuration.Authorizer.Listener.Address)
 	if err != nil {
 		slog.Error("Unable to start server", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	slog.Error("Unable to start server", slog.Any("reason", http.Serve(listener, serve_mux)))
+	slog.Error("Server shut down", slog.Any("reason", http.Serve(listener, serve_mux)))
 }
 
 func ifMetricsEnabled(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !viper.GetBool("metrics.enabled") {
+		if !cfg.Configuration.Metrics.Enabled {
 			http.NotFound(w, r)
 			return
 		}

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal"
-	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
 
@@ -21,7 +21,7 @@ func ReflectionHandlers() map[string]http.HandlerFunc {
 
 func ifEnabled(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !viper.GetBool("reflection.enabled") {
+		if !cfg.Configuration.Reflection.Enabled {
 			http.NotFound(w, r)
 			return
 		}
@@ -62,7 +62,7 @@ func metaPolicyHandler(w http.ResponseWriter, r *http.Request) {
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", "application/json")
-	j, err := json.MarshalIndent(viper.AllSettings(), "", "  ")
+	j, err := json.MarshalIndent(cfg.Configuration, "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Add("content-type", "text/plain")

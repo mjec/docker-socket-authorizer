@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal"
-	"github.com/spf13/viper"
+	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"golang.org/x/exp/slog"
 )
 
@@ -27,25 +27,17 @@ func Reload(w http.ResponseWriter, r *http.Request) {
 	}
 	any_errors := false
 
-	if viper.GetBool("reload.configuration") {
-		if err := viper.ReadInConfig(); err != nil {
+	if cfg.Configuration.Reload.Configuration {
+		if err := cfg.LoadConfiguration(); err != nil {
 			results.Configuration = fmt.Sprintf("Unable to reload config: %s", err)
 			any_errors = true
 		} else {
-			lvl := slog.LevelInfo
-			if err := lvl.UnmarshalText([]byte(viper.GetString("log.level"))); err != nil {
-				slog.Error("Unable to parse log level", slog.Any("error", err))
-				results.Configuration = fmt.Sprintf("Reloaded but unable to parse log level: %s", err)
-				// TODO: should we set a non-200 response here? I don't think so, unless we can validate configs overall
-			} else {
-				results.Configuration = "Reloaded OK (NOTE: some configuration values require a restart to change)"
-			}
-			// TODO: @CONFIG output to file instead of stderr
-			slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
+			o11y.ConfigureLogger()
+			results.Configuration = "Reloaded OK (NOTE: some configuration values require a restart to change)"
 		}
 
 		// If we have a policy watcher but our config is not to, that means it changed. We should shut down the watcher.
-		if internal.GlobalPolicyWatcher != nil && !viper.GetBool("policy.watch_directories") {
+		if internal.GlobalPolicyWatcher != nil && !cfg.Configuration.Policy.WatchDirectories {
 			// This cannot be consolidated with the Close() in the next block, because we need to wait for the new watcher to be
 			// established before we close the old one. Otherwise we risk a (brief) period where changes to policies do not
 			// result in a policy reload, even though the `policy.watch_directories` configuration value did not change.
@@ -53,7 +45,7 @@ func Reload(w http.ResponseWriter, r *http.Request) {
 			internal.GlobalPolicyWatcher = nil
 		}
 
-		if viper.GetBool("policy.watch_directories") {
+		if cfg.Configuration.Policy.WatchDirectories {
 			if policyWatcher, err := internal.WatchPolicies(); err != nil {
 				slog.Error("Unable to establish policy watcher", slog.Any("error", err))
 			} else {
@@ -70,7 +62,7 @@ func Reload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if viper.GetBool("reload.policies") {
+	if cfg.Configuration.Reload.Policies {
 		if err := internal.LoadPolicies(); err != nil {
 			results.Policies = fmt.Sprintf("Unable to reload policies: %s", err)
 			any_errors = true

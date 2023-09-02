@@ -21,6 +21,6 @@ reload: # determines what the /reload endpoint does
     policies: true
     configuration: true             # WARNING: cannot go false->true without restart but CAN go true->false where it is then stuck
 log:
-    level: info
+    level: error
     input: false
     detailed_result: false # "ok" is always logged as a boolean field

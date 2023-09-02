@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/open-policy-agent/opa/rego"
-	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
 
@@ -112,7 +112,7 @@ func WatchPolicies() (*PolicyWatcher, error) {
 	go handlePolicyFileChange(watcher, shutdown_policy_watcher)
 	go handlePolicyWatcherClose(watcher, shutdown_policy_watcher)
 
-	for _, dir := range viper.GetStringSlice("policy.directories") {
+	for _, dir := range cfg.Configuration.Policy.Directories {
 		err = watcher.Add(dir)
 		if err != nil {
 			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
@@ -164,7 +164,7 @@ func LoadPolicies() error {
 	start_time := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
 
-	e, err := NewEvaluator(rego.Load(viper.GetStringSlice("policy.directories"), nil))
+	e, err := NewEvaluator(rego.Load(cfg.Configuration.Policy.Directories, nil))
 	if err != nil {
 		return err
 	}

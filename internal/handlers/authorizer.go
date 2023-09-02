@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/mjec/docker-socket-authorizer/cfg"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
-	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 
 	"github.com/open-policy-agent/opa/rego"
@@ -22,7 +22,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var contextualLogger *slog.Logger
-	if viper.GetBool("log.input") {
+	if cfg.Configuration.Log.Input {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
 		contextualLogger = slog.With(slog.Any("input", input))
 	} else {
@@ -41,7 +41,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if viper.GetBool("log.detailed_result") {
+	if cfg.Configuration.Log.DetailedResult {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
 		contextualLogger = contextualLogger.With(slog.Any("result", result_set[0].Bindings))
 	} else {

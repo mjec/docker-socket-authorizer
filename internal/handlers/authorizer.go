@@ -33,7 +33,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 	// It's important we clone the pointer here! Otherwise we'll be racing with policy reloads
 	evaluator := internal.Evaluator
 
-	result_set, err := evaluator.EvaluateQuery(r.Context(), rego.EvalInput(input))
+	resultSet, err := evaluator.EvaluateQuery(r.Context(), rego.EvalInput(input))
 	if err != nil {
 		contextualLogger.Error("Error evaluating policy", slog.Any("error", err))
 		o11y.Metrics.Errors.Inc()
@@ -44,12 +44,12 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 
 	if cfg.Log.DetailedResult {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
-		contextualLogger = contextualLogger.With(slog.Any("result", result_set[0].Bindings))
+		contextualLogger = contextualLogger.With(slog.Any("result", resultSet[0].Bindings))
 	} else {
 		contextualLogger = slog.With()
 	}
 
-	if err := evaluator.WriteToStorage(r.Context(), result_set[0].Bindings["to_store"].(map[string]interface{})); err != nil {
+	if err := evaluator.WriteToStorage(r.Context(), resultSet[0].Bindings["to_store"].(map[string]interface{})); err != nil {
 		contextualLogger.Error("Error writing to storage", slog.Any("error", err))
 		o11y.Metrics.Errors.Inc()
 		w.WriteHeader(http.StatusInternalServerError)
@@ -57,9 +57,9 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: do NOT use `result_set.Allowed()`!
+	// NOTE: do NOT use `resultSet.Allowed()`!
 	// The query is not set up for that. Always explicitly check the `ok` output.
-	if result_set[0].Bindings["ok"].(bool) {
+	if resultSet[0].Bindings["ok"].(bool) {
 		o11y.Metrics.Approved.Inc()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "OK")

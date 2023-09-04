@@ -23,11 +23,11 @@ func main() {
 	// config loading error (if any) and the logger configuration error (if any).
 	// Hence these two lines MUST remain together, in this order; even though it'd be nice to
 	// use if err := ...; err != nil { ... } constructs.
-	cfg, load_configuration_err := config.LoadConfiguration()
-	configure_logger_err := o11y.ConfigureLogger()
+	cfg, loadConfigurationErr := config.LoadConfiguration()
+	configureLoggerErr := o11y.ConfigureLogger()
 	// Now we can record those errors, which we do in the order in which they ocurred.
-	if load_configuration_err != nil {
-		var contextualLogger *slog.Logger = slog.With(slog.Any("error", load_configuration_err))
+	if loadConfigurationErr != nil {
+		var contextualLogger *slog.Logger = slog.With(slog.Any("error", loadConfigurationErr))
 		if viper.ConfigFileUsed() == "" {
 			contextualLogger = contextualLogger.With(slog.String("file", viper.ConfigFileUsed()))
 		}
@@ -37,8 +37,8 @@ func main() {
 		}
 		contextualLogger.Warn("Unable to load configuration file; continuing with default settings")
 	}
-	if configure_logger_err != nil {
-		slog.Error("Logger configuration failed, continuing with defaults", slog.Any("error", configure_logger_err))
+	if configureLoggerErr != nil {
+		slog.Error("Logger configuration failed, continuing with defaults", slog.Any("error", configureLoggerErr))
 	}
 
 	// Config cannot be gracefully reloaded; sorry.
@@ -54,55 +54,55 @@ func main() {
 	}
 
 	if cfg.Policy.WatchDirectories {
-		policyWatcher, load_configuration_err := internal.WatchPolicies()
-		if load_configuration_err != nil {
-			slog.Error("Unable to establish policy watcher", slog.Any("error", load_configuration_err))
+		policyWatcher, watchPoliciesErr := internal.WatchPolicies()
+		if watchPoliciesErr != nil {
+			slog.Error("Unable to establish policy watcher", slog.Any("error", watchPoliciesErr))
 		}
 		internal.GlobalPolicyWatcher.Store(policyWatcher)
 	}
 
-	serve_mux := http.NewServeMux()
+	authorizerMux := http.NewServeMux()
 
 	for path, handler := range handlers.ReflectionHandlers() {
-		serve_mux.HandleFunc("/reflection/"+path, handler)
+		authorizerMux.HandleFunc("/reflection/"+path, handler)
 	}
 
 	for path, handler := range handlers.ReloadHandlers() {
-		serve_mux.HandleFunc("/reload/"+path, handler)
+		authorizerMux.HandleFunc("/reload/"+path, handler)
 	}
 
-	serve_mux.HandleFunc("/authorize", handlers.Authorize)
+	authorizerMux.HandleFunc("/authorize", handlers.Authorize)
 
 	if cfg.Authorizer.IncludesMetrics {
-		serve_mux.Handle(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
+		authorizerMux.Handle(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 	}
 
 	if cfg.Metrics.Listener.Type != "" && cfg.Metrics.Listener.Type != "none" {
-		metrics_listener, err := net.Listen(cfg.Metrics.Listener.Type, cfg.Metrics.Listener.Address)
+		metricsListener, err := net.Listen(cfg.Metrics.Listener.Type, cfg.Metrics.Listener.Address)
 		if err != nil {
 			slog.Error("Unable to start metrics server", slog.Any("error", err))
 			os.Exit(1)
 		}
-		defer metrics_listener.Close()
+		defer metricsListener.Close()
 
-		metrics_serve_mux := http.NewServeMux()
-		metrics_serve_mux.HandleFunc(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 
 		go func() {
-			slog.Error("Unable to start metrics server", slog.Any("reason", http.Serve(metrics_listener, metrics_serve_mux)))
+			slog.Error("Unable to start metrics server", slog.Any("reason", http.Serve(metricsListener, metricsMux)))
 		}()
 	}
 
 	slog.Info("Server starting")
 
-	listener, load_configuration_err := net.Listen(cfg.Authorizer.Listener.Type, cfg.Authorizer.Listener.Address)
-	if load_configuration_err != nil {
-		slog.Error("Unable to start server", slog.Any("error", load_configuration_err))
+	listener, loadConfigurationErr := net.Listen(cfg.Authorizer.Listener.Type, cfg.Authorizer.Listener.Address)
+	if loadConfigurationErr != nil {
+		slog.Error("Unable to start server", slog.Any("error", loadConfigurationErr))
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	slog.Error("Server shut down", slog.Any("reason", http.Serve(listener, serve_mux)))
+	slog.Error("Server shut down", slog.Any("reason", http.Serve(listener, authorizerMux)))
 }
 
 func ifMetricsEnabled(handler http.Handler) http.HandlerFunc {

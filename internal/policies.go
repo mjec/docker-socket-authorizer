@@ -96,19 +96,19 @@ ok {
 `
 
 type PolicyWatcher struct {
-	watcher          *fsnotify.Watcher
-	shutdown_channel chan struct{}
-	is_closed        atomic.Bool
+	watcher         *fsnotify.Watcher
+	shutdownChannel chan struct{}
+	isClosed        atomic.Bool
 }
 
 // Idempotent (only runs once, guaranteed by an atomic bool)
 func (pw *PolicyWatcher) Close() {
-	if pw.is_closed.CompareAndSwap(false, true) {
+	if pw.isClosed.CompareAndSwap(false, true) {
 		return
 	}
 
-	pw.shutdown_channel <- struct{}{}
-	close(pw.shutdown_channel)
+	pw.shutdownChannel <- struct{}{}
+	close(pw.shutdownChannel)
 }
 
 func WatchPolicies() (*PolicyWatcher, error) {
@@ -119,29 +119,29 @@ func WatchPolicies() (*PolicyWatcher, error) {
 		return nil, err
 	}
 
-	shutdown_policy_watcher := make(chan struct{})
+	shutdownPWChannel := make(chan struct{})
 
 	go handlePolicyFileChange(watcher)
-	go handlePolicyWatcherClose(watcher, shutdown_policy_watcher)
+	go handlePolicyWatcherClose(watcher, shutdownPWChannel)
 
 	for _, dir := range cfg.Policy.Directories {
 		err = watcher.Add(dir)
 		if err != nil {
 			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
-			shutdown_policy_watcher <- struct{}{}
+			shutdownPWChannel <- struct{}{}
 			return nil, err
 		}
 	}
 	slog.Info("Established policy watcher", slog.Any("watched", watcher.WatchList()))
 
 	return &PolicyWatcher{
-		watcher:          watcher,
-		shutdown_channel: shutdown_policy_watcher,
+		watcher:         watcher,
+		shutdownChannel: shutdownPWChannel,
 	}, nil
 }
 
-func handlePolicyWatcherClose(watcher *fsnotify.Watcher, shutdown_policy_watcher chan struct{}) {
-	<-shutdown_policy_watcher
+func handlePolicyWatcherClose(watcher *fsnotify.Watcher, shutdownPolicyWatcher chan struct{}) {
+	<-shutdownPolicyWatcher
 	watcher.Close()
 	slog.Info("Shutting down policy watcher")
 }
@@ -173,14 +173,14 @@ func handlePolicyFileChange(watcher *fsnotify.Watcher) {
 }
 
 func LoadPolicies() error {
-	start_time := time.Now()
-	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
+	startTime := time.Now()
+	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(startTime).Seconds())
 
 	cfg := config.ConfigurationPointer.Load()
 
 	loadPoliciesMutex.Lock()
 	defer loadPoliciesMutex.Unlock()
-	o11y.Metrics.PolicyMutexWaitTimer.Observe(time.Since(start_time).Seconds())
+	o11y.Metrics.PolicyMutexWaitTimer.Observe(time.Since(startTime).Seconds())
 
 	e, err := NewEvaluator(rego.Load(cfg.Policy.Directories, nil))
 	if err != nil {
@@ -189,16 +189,16 @@ func LoadPolicies() error {
 	Evaluator = e
 
 	// List all the modules except docker_socket_meta_policy
-	module_list := make([]string, len(e.authorizer.Modules())-1)
+	moduleList := make([]string, len(e.authorizer.Modules())-1)
 	i := 0
 	for key := range e.authorizer.Modules() {
 		if key == "docker_socket_meta_policy" {
 			continue
 		}
-		module_list[i] = key
+		moduleList[i] = key
 		i++
 	}
-	slog.Info("Policies loaded successfully", slog.Any("policies", e.policyList), slog.Any("files_evaluated", module_list))
+	slog.Info("Policies loaded successfully", slog.Any("policies", e.policyList), slog.Any("files_evaluated", moduleList))
 
 	o11y.Metrics.PolicyLoads.Inc()
 	return nil

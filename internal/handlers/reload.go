@@ -41,16 +41,16 @@ func reloadConfiguration(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("Unable to reload config", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
-		j, json_err := json.MarshalIndent(struct {
+		j, jsonErr := json.MarshalIndent(struct {
 			Error  string `json:"error"`
 			Reason string `json:"reason"`
 		}{
 			Error:  "Unable to reload configuration",
 			Reason: err.Error(),
 		}, "", "  ")
-		if json_err != nil {
+		if jsonErr != nil {
 			w.Header().Add("content-type", "text/plain")
-			fmt.Fprintf(w, "Unable to reload config: %s\nUnable to generate JSON response: %s\n", err, json_err)
+			fmt.Fprintf(w, "Unable to reload config: %s\nUnable to generate JSON response: %s\n", err, jsonErr)
 			return
 		}
 		w.Header().Add("content-type", "text/json")
@@ -89,15 +89,15 @@ func reloadConfiguration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// GlobalPolicyWatcher is an atomic pointer which we update with CAS, making this operation thread safe
-	original_policy_watcher := internal.GlobalPolicyWatcher.Load()
+	originalPolicyWatcher := internal.GlobalPolicyWatcher.Load()
 	// If we have a policy watcher but our config is not to, that means it changed. We should shut down the watcher.
-	if original_policy_watcher != nil && !cfg.Policy.WatchDirectories {
-		original_policy_watcher.Close()
+	if originalPolicyWatcher != nil && !cfg.Policy.WatchDirectories {
+		originalPolicyWatcher.Close()
 		results.OldPolicyWatcher = "Stopped OK (because policy.watch_directories changed)"
 		// We don't really care if the following CAS fails; if someone else has already updated the GlobalPolicyWatcher
-		// then leave that value be. We only care about closing out original_policy_watcher and setting it to nil from
+		// then leave that value be. We only care about closing out originalPolicyWatcher and setting it to nil from
 		// that value specifically.
-		_ = internal.GlobalPolicyWatcher.CompareAndSwap(original_policy_watcher, nil)
+		_ = internal.GlobalPolicyWatcher.CompareAndSwap(originalPolicyWatcher, nil)
 	}
 
 	if cfg.Policy.WatchDirectories {
@@ -111,11 +111,11 @@ func reloadConfiguration(w http.ResponseWriter, r *http.Request) {
 			// period where changes to policies do not result in a policy reload, even if the
 			// `policy.watch_directories` configuration value did not change.
 			// We rely on the fact that Close() is idempotent.
-			if original_policy_watcher != nil {
-				original_policy_watcher.Close()
+			if originalPolicyWatcher != nil {
+				originalPolicyWatcher.Close()
 				results.OldPolicyWatcher = "Stopped OK (restarting because we are watching policy directories)"
 			}
-			if internal.GlobalPolicyWatcher.CompareAndSwap(original_policy_watcher, policyWatcher) {
+			if internal.GlobalPolicyWatcher.CompareAndSwap(originalPolicyWatcher, policyWatcher) {
 				results.NewPolicyWatcher = "Started OK"
 			} else {
 				// Someone else beat us to the punch; discard this policy watcher, which has never been

@@ -56,8 +56,8 @@ type Configuration struct {
 // we don't guarantee a winner, we do guarantee a valid ConfigurationPointer. We
 // return the new Configuration that we Store()d in the ConfigurationPointer.
 func LoadConfiguration() (*Configuration, error) {
-	var new_configuration *Configuration = &Configuration{}
-	if err := defaults.Set(new_configuration); err != nil {
+	var newConfiguration *Configuration = &Configuration{}
+	if err := defaults.Set(newConfiguration); err != nil {
 		return nil, fmt.Errorf("unable to set default configuration (likely a bug): %w", err)
 	}
 	if err := viper.ReadInConfig(); err != nil {
@@ -68,7 +68,7 @@ func LoadConfiguration() (*Configuration, error) {
 		contextualLogger = contextualLogger.With(slog.String("config_file", viper.ConfigFileUsed()))
 	}
 	if err := mergo.Map(
-		new_configuration,
+		newConfiguration,
 		viper.AllSettings(),
 		mergo.WithOverride,
 		mergo.WithTypeCheck,
@@ -81,8 +81,8 @@ func LoadConfiguration() (*Configuration, error) {
 	); err != nil {
 		return nil, fmt.Errorf("unable to merge configuration (likely a bug): %w", err)
 	}
-	ConfigurationPointer.Store(new_configuration)
-	return new_configuration, nil
+	ConfigurationPointer.Store(newConfiguration)
+	return newConfiguration, nil
 }
 
 func InitializeConfiguration() {

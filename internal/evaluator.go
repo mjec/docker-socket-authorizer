@@ -32,39 +32,39 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}
 
 	// We have to do this nonsense to avoid aborting a stale transaction; though doing that is preferable to returning with a hanging transaction
-	transaction_is_committed := false
+	transactionIsCommitted := false
 	defer func() {
-		if !transaction_is_committed {
+		if !transactionIsCommitted {
 			store.Abort(context.Background(), transaction)
 		}
 	}()
 
-	policy_meta_rego := rego.New(
+	policyMetaRego := rego.New(
 		rego.Strict(cfg.Policy.StrictMode),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
-	policyLoader(policy_meta_rego)
-	policy_meta_query, err := policy_meta_rego.PrepareForEval(context.Background())
+	policyLoader(policyMetaRego)
+	policyMetaQuery, err := policyMetaRego.PrepareForEval(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	policy_meta_result, err := policy_meta_query.Eval(context.Background())
+	policyMetaResult, err := policyMetaQuery.Eval(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	if !policy_meta_result[0].Bindings["meta_policy_ok"].(bool) {
-		if pretty_output, err := json.Marshal(policy_meta_result[0].Bindings); err != nil {
-			return nil, fmt.Errorf("meta-policy validation failed and unable to serialize output to JSON (%s): %v", err, policy_meta_result[0].Bindings)
+	if !policyMetaResult[0].Bindings["meta_policy_ok"].(bool) {
+		if prettyOutput, err := json.Marshal(policyMetaResult[0].Bindings); err != nil {
+			return nil, fmt.Errorf("meta-policy validation failed and unable to serialize output to JSON (%s): %v", err, policyMetaResult[0].Bindings)
 		} else {
-			return nil, fmt.Errorf("meta-policy validation failed: %s", pretty_output)
+			return nil, fmt.Errorf("meta-policy validation failed: %s", prettyOutput)
 		}
 	}
-	policy_list := make([]string, len(policy_meta_result[0].Bindings["all_policies"].([]interface{})))
-	for i, policy := range policy_meta_result[0].Bindings["all_policies"].([]interface{}) {
-		policy_list[i] = policy.(string)
+	policyList := make([]string, len(policyMetaResult[0].Bindings["all_policies"].([]interface{})))
+	for i, policy := range policyMetaResult[0].Bindings["all_policies"].([]interface{}) {
+		policyList[i] = policy.(string)
 	}
-	for _, policy := range policy_list {
+	for _, policy := range policyList {
 		path, ok := storage.ParsePath("/docker_socket_authorizer_storage/" + policy)
 		if !ok {
 			return nil, fmt.Errorf("unable to parse path to policy %s in store", policy)
@@ -72,7 +72,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		store.Write(context.Background(), transaction, storage.AddOp, path, map[string]interface{}{})
 	}
 
-	new_rego_object := rego.New(
+	newRegoObject := rego.New(
 		rego.Strict(cfg.Policy.StrictMode),
 		rego.Store(store),
 		rego.Transaction(transaction),
@@ -80,12 +80,12 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		rego.Query(QUERY),
 	)
 	if cfg.Policy.PrintEnabled {
-		rego.EnablePrintStatements(true)(new_rego_object)
-		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(new_rego_object)
+		rego.EnablePrintStatements(true)(newRegoObject)
+		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(newRegoObject)
 	}
-	policyLoader(new_rego_object)
+	policyLoader(newRegoObject)
 
-	query, err := new_rego_object.PrepareForEval(context.Background())
+	query, err := newRegoObject.PrepareForEval(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +93,12 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	if err := store.Commit(context.Background(), transaction); err != nil {
 		return nil, err
 	}
-	transaction_is_committed = true
+	transactionIsCommitted = true
 
 	return &RegoEvaluator{
 		authorizer: &query,
 		store:      &store,
-		policyList: policy_list,
+		policyList: policyList,
 	}, nil
 }
 
@@ -106,7 +106,7 @@ func (r *RegoEvaluator) EvaluateQuery(ctx context.Context, options ...rego.EvalO
 	return r.authorizer.Eval(ctx, options...)
 }
 
-func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]interface{}) error {
+func (r *RegoEvaluator) WriteToStorage(ctx context.Context, toStore map[string]interface{}) error {
 	// Store has gone stale, so we're free to ignore the write (if we execute it no harm, just wasted effort)
 	// WARNING: if we stop using inmem or stop resetting storage on reload, this will break.
 	if r.isStale() {
@@ -118,17 +118,17 @@ func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]
 		return err
 	}
 	// We have to do this nonsense to avoid aborting a stale transaction; though doing that is preferable to returning with a hanging transaction
-	transaction_is_committed := false
+	transactionIsCommitted := false
 	defer func() {
-		if !transaction_is_committed {
+		if !transactionIsCommitted {
 			(*r.store).Abort(context.Background(), transaction)
 		}
 	}()
 
-	for policy, to_store := range to_store {
+	for policy, toStore := range toStore {
 		if path, ok := storage.ParsePath("/docker_socket_authorizer_storage/" + policy); !ok {
 			return fmt.Errorf("unable to parse path to policy %s in store", policy)
-		} else if err := (*r.store).Write(ctx, transaction, storage.AddOp, path, to_store); err != nil {
+		} else if err := (*r.store).Write(ctx, transaction, storage.AddOp, path, toStore); err != nil {
 			return err
 		}
 	}
@@ -136,7 +136,7 @@ func (r *RegoEvaluator) WriteToStorage(ctx context.Context, to_store map[string]
 	if err := (*r.store).Commit(ctx, transaction); err != nil {
 		return err
 	}
-	transaction_is_committed = true
+	transactionIsCommitted = true
 
 	return nil
 }

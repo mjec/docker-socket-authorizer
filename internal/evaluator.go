@@ -81,6 +81,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	)
 	if cfg.Policy.PrintEnabled {
 		rego.EnablePrintStatements(true)(newRegoObject)
+		// TODO @CONFIG set output for print statements
 		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(newRegoObject)
 	}
 	policyLoader(newRegoObject)

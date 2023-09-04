@@ -15,7 +15,7 @@ metrics:
   enabled: true           # Whether to serve prometheus metrics at all, on either listener. Changes may take only partial effect on reload.
   path: /metrics          # The path to serve prometheus metrics on, on either listener. Changes take effect on restart only, not reload.
   listener:               # The listener on which to serve the prometheus metrics API. Changes take effect on restart only, not reload.
-    type: tcp             # As for authorizer.listener.type, but also supports "none" or "" to disable this listener. Changes take effect on restart only, not reload.
+    type: tcp             # As for authorizer.listener.type, but also supports "none" to disable this listener. Changes take effect on restart only, not reload.
     address: ":9100"      # As for authorizer.listener.address. Changes take effect on restart only, not reload.
 reload:
   configuration: true     # Whether to reload configuration on /reload/configuration. Can go true->false on reload, but false->true only on restart.

@@ -29,7 +29,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// It's important we clone the pointer here! Otherwise we'll be racing with policy reloads
-	evaluator := internal.Evaluator
+	evaluator := internal.Evaluator.Load()
 
 	resultSet, err := evaluator.EvaluateQuery(r.Context(), rego.EvalInput(input))
 	if err != nil {

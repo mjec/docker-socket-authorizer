@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	Evaluator           *RegoEvaluator                = nil
+	Evaluator           atomic.Pointer[RegoEvaluator] = atomic.Pointer[RegoEvaluator]{}
 	GlobalPolicyWatcher atomic.Pointer[PolicyWatcher] = atomic.Pointer[PolicyWatcher]{}
 	loadPoliciesMutex   *sync.Mutex                   = &sync.Mutex{}
 )
@@ -186,7 +186,7 @@ func LoadPolicies() error {
 	if err != nil {
 		return err
 	}
-	Evaluator = e
+	Evaluator.Store(e)
 
 	// List all the modules except docker_socket_meta_policy
 	moduleList := make([]string, len(e.authorizer.Modules())-1)

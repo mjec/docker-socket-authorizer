@@ -157,5 +157,5 @@ func (r *RegoEvaluator) WriteToStorage(ctx context.Context, toStore map[string]i
 }
 
 func (r *RegoEvaluator) isStale() bool {
-	return Evaluator != r
+	return Evaluator.Load() != r
 }

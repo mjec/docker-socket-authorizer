@@ -62,9 +62,14 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 			return nil, fmt.Errorf("meta-policy validation failed: %s", prettyOutput)
 		}
 	}
-	policyList := make([]string, len(policyMetaResult[0].Bindings["all_policies"].([]interface{})))
-	for i, policy := range policyMetaResult[0].Bindings["all_policies"].([]interface{}) {
-		policyList[i] = policy.(string)
+	policyList := make([]string, 0, len(policyMetaResult[0].Bindings["all_policies"].([]interface{})))
+	for _, policy := range policyMetaResult[0].Bindings["all_policies"].([]interface{}) {
+		switch value := policy.(type) {
+		case string:
+			policyList = append(policyList, value)
+		default:
+			return nil, fmt.Errorf("invalid policy name of type %T (%v) in all_policies list returned by meta-policy; likely a bug", value, value)
+		}
 	}
 	for _, policy := range policyList {
 		path, ok := storage.ParsePath("/docker_socket_authorizer_storage/" + policy)

@@ -122,27 +122,35 @@ Logs are written as JSON lines.
 
 #### Authorization logs
 
-Of particular interest are info log lines with `msg` of `Request processed`. These represent calls to `/authorize` where we did not encounter an error. They include the following values:
+Of particular interest are info log lines with `msg` of `Request processed`. These represent calls to `/authorize` where we did not encounter an error.
+
+These lines may contain the following attributes:
+
+Variable | Type | Configuration | Description | Available fields
+-------- | ---- | ------------- | ----------- | ----------------
+`input` | map\[string\]interface{} | `log.input` | A subset of inputs used to evaluate this request | See [Available Inputs](#available-inputs)
+`result` | map\[string\]interface{} | `log.result` | A subset of results of evaluating this request | See [Available Results](#available-results)
+
+The relevant configuration option determines what subset of fields is logged. Each of those options is a list of the names of the top-level fields to include in the log. By default only the `result.ok` field is logged, and all others are ignored.
+
+If the list of fields to be logged is empty, then that attribute will not be logged at all.
+
+If the list of fields contains a single element which is the string "*", then all fields will be logged.
+
+##### Available results
+
+The available top-level properties of `result` include:
 
 Variable | Type | Description
 -------- | ---- | -----------
-`ok` | boolean | `true` if and only if the request was approved, false otherwise
-`input` | map\[string\]interface{} | The set of inputs used to evaluate this request (matches [Available Inputs](#available-inputs))
-`result` | map\[string\]interface{} | The set of results of evaluating this request
-
-It is possible to elide `input` and/or `result` by setting the `log.input` and/or `log.detailed_result` configuration options to `false`.
-
-The properties of `result` include:
-
-Variable | Type | Description
--------- | ---- | -----------
-`all_policies` | []string | A list of the names of policies that were evaluated under the `docker_socket_authorizer` namespace
-`denies` | map\[string\]string | A map from policy to message for each policy with a result of "deny"
-`allows` | map\[string\]string | A map from policy to message for each policy with a result of "allow"
-`skips` | map\[string\]string | A map from policy to message for each policy with a result of "skip"
+`ok` | bool | True if and only if the result was a pass
 `ok_conditions` | map\[string\]bool | A map from success condition to whether or not that condition passed
+`all_policies` | []string | A list of the names of policies that were evaluated under the `docker_socket_authorizer` namespace
+`allows` | map\[string\]string | A map from policy to message for each policy with a result of "allow"
+`denies` | map\[string\]string | A map from policy to message for each policy with a result of "deny"
+`skips` | map\[string\]string | A map from policy to message for each policy with a result of "skip"
 
-Other properties may exist, and you should not rely on this list being exhaustive. For more, see [HACKING.md](HACKING.md#updating-the-query).
+Other properties may exist, and you should not rely on this list being exhaustive. The actual list is determined by the query. For more, see [HACKING.md](HACKING.md#updating-the-query).
 
 ### Metrics
 

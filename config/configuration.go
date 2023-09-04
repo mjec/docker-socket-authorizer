@@ -45,10 +45,10 @@ type Configuration struct {
 		ReopenLogFile bool `default:"true" json:"reopen_log_file"`
 	} `json:"reload"`
 	Log struct {
-		Filename       string `default:"stderr" json:"filename"`
-		Level          string `default:"info" json:"level"`
-		Input          bool   `default:"true" json:"input"`
-		DetailedResult bool   `default:"true" json:"detailed_result"`
+		Filename string   `default:"stderr" json:"filename"`
+		Level    string   `default:"info" json:"level"`
+		Input    []string `default:"[]" json:"input"`
+		Result   []string `default:"[\"ok\"]" json:"result"`
 	} `json:"log"`
 }
 

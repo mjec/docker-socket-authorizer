@@ -24,5 +24,6 @@ reload:
 log:
   filename: stderr        # Where to output logs. Can be a filename, "stderr" or "stdout".
   level: info             # Minimum log level to output. One of "debug", "info", "warn", "error".
-  input: true             # Whether to log the input to the authorizer API.
-  detailed_result: true   # Whether to log detailed results to the authorizer API. Note "ok" is always logged as a boolean field.
+  input: []               # The input fields to log from the authorization endpoint. Must be a list of strings. If the list is empty, no fields are logged. If the list contains a single element "*", all fields are logged.
+  result:                 # The result fields to log from the authorization endpoint. Must be a list of strings. If the list is empty, no fields are logged. If the list contains a single element "*", all fields are logged.
+    - "ok"

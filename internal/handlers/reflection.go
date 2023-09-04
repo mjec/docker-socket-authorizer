@@ -62,7 +62,6 @@ func metaPolicyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configurationHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("content-type", "application/json")
 	j, err := json.MarshalIndent(config.ConfigurationPointer, "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -76,7 +75,6 @@ func configurationHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func defaultConfigurationHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("content-type", "application/json")
 	j, err := json.MarshalIndent(config.DefaultConfiguration(), "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

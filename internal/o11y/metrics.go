@@ -1,8 +1,15 @@
 package o11y
 
 import (
+	"net"
+	"net/http"
+
+	"github.com/mjec/docker-socket-authorizer/config"
+	"github.com/mjec/docker-socket-authorizer/internal/shutdown"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/exp/slog"
 )
 
 var Metrics = struct {
@@ -37,4 +44,35 @@ var Metrics = struct {
 		Name: "docker_sock_authorizer_policy_mutex_wait_seconds",
 		Help: "The time it takes to acquire the policy mutex; always contained in policy_load time",
 	}),
+}
+
+func InitializeMetrics(cfg *config.Configuration) error {
+	if cfg.Metrics.Listener.Type != "" && cfg.Metrics.Listener.Type != "none" {
+		metricsListener, err := net.Listen(cfg.Metrics.Listener.Type, cfg.Metrics.Listener.Address)
+		if err != nil {
+			return err
+		}
+		defer shutdown.OnShutdown("metrics", func() {
+			metricsListener.Close()
+		})
+
+		metricsMux := http.NewServeMux()
+		metricsMux.HandleFunc(
+			cfg.Metrics.Path,
+			func(w http.ResponseWriter, r *http.Request) {
+				if !config.ConfigurationPointer.Load().Metrics.Enabled {
+					http.NotFound(w, r)
+					return
+				}
+				promhttp.Handler().ServeHTTP(w, r)
+			},
+		)
+
+		go func() {
+			shutdownErr := http.Serve(metricsListener, metricsMux)
+			_ = shutdown.Shutdown("metrics server error", slog.LevelError, slog.With("error", shutdownErr))
+		}()
+	}
+
+	return nil
 }

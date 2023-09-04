@@ -5,11 +5,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/handlers"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
+	"github.com/mjec/docker-socket-authorizer/internal/shutdown"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/exp/slog"
 
@@ -50,19 +53,27 @@ func main() {
 	// the socket seems undesirable. Thus, no config reloading. Restart when you want to change things, and it's up to you to figure out how to
 	// manage the downtime.
 
-	if err := internal.LoadPolicies(); err != nil {
-		slog.Error("Unable to load policies", slog.Any("error", err))
+	initializeSignalHandler(cfg)
+
+	if err := internal.InitializePolicies(cfg); err != nil {
+		slog.Error("Unable to initialize policies", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	if cfg.Policy.WatchDirectories {
-		policyWatcher, watchPoliciesErr := internal.WatchPolicies()
-		if watchPoliciesErr != nil {
-			slog.Error("Unable to establish policy watcher", slog.Any("error", watchPoliciesErr))
-		}
-		internal.GlobalPolicyWatcher.Store(policyWatcher)
+	if err := o11y.InitializeMetrics(cfg); err != nil {
+		slog.Error("Unable to initialize metrics", slog.Any("error", err))
+		os.Exit(1)
 	}
 
+	if err := initializeAuthServer(cfg); err != nil {
+		slog.Error("Unable to initialize authorization server", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	shutdown.Wait()
+}
+
+func initializeAuthServer(cfg *config.Configuration) error {
 	authorizerMux := http.NewServeMux()
 
 	for path, handler := range handlers.ReflectionHandlers() {
@@ -79,32 +90,41 @@ func main() {
 		authorizerMux.Handle(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 	}
 
-	if cfg.Metrics.Listener.Type != "" && cfg.Metrics.Listener.Type != "none" {
-		metricsListener, err := net.Listen(cfg.Metrics.Listener.Type, cfg.Metrics.Listener.Address)
-		if err != nil {
-			slog.Error("Unable to start metrics server", slog.Any("error", err))
-			os.Exit(1)
+	listener, err := net.Listen(cfg.Authorizer.Listener.Type, cfg.Authorizer.Listener.Address)
+	if err != nil {
+		return err
+	}
+
+	defer shutdown.OnShutdown("auth server", func() {
+		listener.Close()
+	})
+
+	go func() {
+		shutdownErr := http.Serve(listener, authorizerMux)
+		_ = shutdown.Shutdown("authorization server error", slog.LevelError, slog.With(slog.Any("error", shutdownErr)))
+	}()
+
+	return nil
+}
+
+func initializeSignalHandler(cfg *config.Configuration) {
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP)
+
+	go func() {
+		signal := <-signalChannel
+		switch signal {
+		case syscall.SIGINT:
+			fallthrough
+		case syscall.SIGTERM:
+			fallthrough
+		case syscall.SIGQUIT:
+			_ = shutdown.Shutdown("signal", slog.LevelInfo, slog.With(slog.String("signal", signal.String())))
+		case syscall.SIGHUP:
+			// This means doing everything we do in reloadConfiguration
+			slog.Info("SIGHUP is not currently supported but eventually may cause config reloads")
 		}
-		defer metricsListener.Close()
-
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
-
-		go func() {
-			slog.Error("Unable to start metrics server", slog.Any("reason", http.Serve(metricsListener, metricsMux)))
-		}()
-	}
-
-	slog.Info("Server starting")
-
-	listener, loadConfigurationErr := net.Listen(cfg.Authorizer.Listener.Type, cfg.Authorizer.Listener.Address)
-	if loadConfigurationErr != nil {
-		slog.Error("Unable to start server", slog.Any("error", loadConfigurationErr))
-		os.Exit(1)
-	}
-	defer listener.Close()
-
-	slog.Error("Server shut down", slog.Any("reason", http.Serve(listener, authorizerMux)))
+	}()
 }
 
 func ifMetricsEnabled(handler http.Handler) http.HandlerFunc {

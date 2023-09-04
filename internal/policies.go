@@ -172,6 +172,22 @@ func handlePolicyFileChange(watcher *fsnotify.Watcher) {
 	}
 }
 
+func InitializePolicies(cfg *config.Configuration) error {
+	if err := LoadPolicies(); err != nil {
+		return err
+	}
+
+	if cfg.Policy.WatchDirectories {
+		policyWatcher, watchPoliciesErr := WatchPolicies()
+		if watchPoliciesErr != nil {
+			slog.Error("Unable to establish policy watcher", slog.Any("error", watchPoliciesErr))
+		}
+		GlobalPolicyWatcher.Store(policyWatcher)
+	}
+
+	return nil
+}
+
 func LoadPolicies() error {
 	startTime := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(startTime).Seconds())

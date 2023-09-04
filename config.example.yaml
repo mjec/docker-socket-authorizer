@@ -3,7 +3,7 @@ policy:
     - "./policies/"
   watch_directories: true # Whether to watch the policy directories for changes.
   strict_mode: true       # Whether to use OPA strict mode when evaluating policies.
-  print_enabled: true     # Whether to enable print statements in policies.
+  print_to: stdout        # The destination for print statements in policies. Can be "stdout", "stderr" or "none" to disable printing.
 reflection:
   enabled: true           # Whether to enable the reflection API (i.e. endpoints under /reflection/).
 authorizer:

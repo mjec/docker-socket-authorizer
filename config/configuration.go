@@ -19,7 +19,7 @@ type Configuration struct {
 		Directories      []string `default:"[\"./policies/\"]" json:"directories"`
 		WatchDirectories bool     `default:"true" json:"watch_directories"`
 		StrictMode       bool     `default:"true" json:"strict_mode"`
-		PrintEnabled     bool     `default:"true" json:"print_enabled"`
+		PrintTo          string   `default:"stdout" json:"print_to"`
 	} `json:"policy"`
 	Reflection struct {
 		Enabled bool `default:"true" json:"enabled"`

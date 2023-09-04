@@ -56,10 +56,7 @@ type Configuration struct {
 // we don't guarantee a winner, we do guarantee a valid ConfigurationPointer. We
 // return the new Configuration that we Store()d in the ConfigurationPointer.
 func LoadConfiguration() (*Configuration, error) {
-	var newConfiguration *Configuration = &Configuration{}
-	if err := defaults.Set(newConfiguration); err != nil {
-		return nil, fmt.Errorf("unable to set default configuration (likely a bug): %w", err)
-	}
+	newConfiguration := DefaultConfiguration()
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("unable to read configuration: %w", err)
 	}
@@ -88,6 +85,14 @@ func InitializeConfiguration() {
 	viper.SetConfigName("config")
 	viper.AddConfigPath("/etc/docker-socket-authorizer/")
 	viper.AddConfigPath(".")
+}
+
+func DefaultConfiguration() *Configuration {
+	var newConfiguration *Configuration = &Configuration{}
+	if err := defaults.Set(newConfiguration); err != nil {
+		panic(fmt.Errorf("unable to set default configuration (likely a bug): %w", err))
+	}
+	return newConfiguration
 }
 
 type stringListTransformer struct {

@@ -12,10 +12,11 @@ import (
 
 func ReflectionHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"input":         ifEnabled(inputHandler),
-		"query":         ifEnabled(queryHandler),
-		"meta-policy":   ifEnabled(metaPolicyHandler),
-		"configuration": ifEnabled(configurationHandler),
+		"input":                 ifEnabled(inputHandler),
+		"query":                 ifEnabled(queryHandler),
+		"meta-policy":           ifEnabled(metaPolicyHandler),
+		"configuration":         ifEnabled(configurationHandler),
+		"default-configuration": ifEnabled(defaultConfigurationHandler),
 	}
 }
 
@@ -32,7 +33,7 @@ func ifEnabled(handler http.HandlerFunc) http.HandlerFunc {
 func inputHandler(w http.ResponseWriter, r *http.Request) {
 	input, err := internal.MakeInput(r)
 	if err != nil {
-		slog.Error("Error making input", slog.Any("error", err))
+		slog.Error("Unable to construct input (likely a bug)", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Add("content-type", "text/plain")
 		fmt.Fprintln(w, "Unable to construct input")
@@ -40,7 +41,7 @@ func inputHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	j, err := json.MarshalIndent(input, "", "  ")
 	if err != nil {
-		slog.Error("Unable to marshal input to JSON", slog.Any("error", err))
+		slog.Error("Unable to marshal input to JSON (likely a bug)", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Add("content-type", "text/plain")
 		fmt.Fprintln(w, "Unable to marshal input")
@@ -66,8 +67,22 @@ func configurationHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Add("content-type", "text/plain")
-		fmt.Fprintln(w, "Unable to marshal input")
-		slog.Error("Unable to marshal input to JSON", slog.Any("error", err))
+		fmt.Fprintln(w, "Unable to marshal configuration")
+		slog.Error("Unable to marshal configuration to JSON (likely a bug)", slog.Any("error", err))
+		return
+	}
+	w.Header().Add("content-type", "application/json")
+	fmt.Fprintf(w, "%s\n", j)
+}
+
+func defaultConfigurationHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", "application/json")
+	j, err := json.MarshalIndent(config.DefaultConfiguration(), "", "  ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Add("content-type", "text/plain")
+		fmt.Fprintln(w, "Unable to marshal default configuration")
+		slog.Error("Unable to marshal default configuration to JSON (likely a bug)", slog.Any("error", err))
 		return
 	}
 	w.Header().Add("content-type", "application/json")

@@ -22,7 +22,7 @@ func ReloadHandlers() map[string]http.HandlerFunc {
 // This taking isEnabled as a function is necessary to check the value of the configuration at the time of the request.
 func ifEnabledAndPost(isEnabled func(cfg *config.Configuration) bool, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !isEnabled(config.ConfigurationPointer) {
+		if !isEnabled(config.ConfigurationPointer.Load()) {
 			http.NotFound(w, r)
 			return
 		}
@@ -37,8 +37,8 @@ func ifEnabledAndPost(isEnabled func(cfg *config.Configuration) bool, handler ht
 }
 
 func reloadConfiguration(w http.ResponseWriter, r *http.Request) {
-	// LoadConfiguration is thread safe
-	if err := config.LoadConfiguration(); err != nil {
+	cfg, err := config.LoadConfiguration()
+	if err != nil {
 		slog.Warn("Unable to reload config", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		j, json_err := json.MarshalIndent(struct {
@@ -76,7 +76,6 @@ func reloadConfiguration(w http.ResponseWriter, r *http.Request) {
 		NewPolicyWatcher: "Did not attempt to start",
 		Logger:           "Did not attempt to reopen",
 	}
-	cfg := config.ConfigurationPointer
 
 	// We are always OK as soon as the ConfigurationPointer is updated
 	w.WriteHeader(http.StatusOK)

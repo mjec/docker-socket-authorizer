@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"reflect"
+	"sync/atomic"
 
 	"dario.cat/mergo"
 	"github.com/creasty/defaults"
@@ -11,7 +12,7 @@ import (
 )
 
 // Any copy of this pointer is guaranteed to be consistent (immutable)
-var ConfigurationPointer *Configuration
+var ConfigurationPointer *atomic.Pointer[Configuration] = &atomic.Pointer[Configuration]{}
 
 type Configuration struct {
 	Policy struct {
@@ -51,15 +52,16 @@ type Configuration struct {
 	} `json:"log"`
 }
 
-// Thread safe, ish: we atomically swap in the new ConfigurationPointer object;
-// we don't guarantee a winner, but we do guarantee a valid ConfigurationPointer.
-func LoadConfiguration() error {
+// Thread safe: we atomically swap in the new ConfigurationPointer object; while
+// we don't guarantee a winner, we do guarantee a valid ConfigurationPointer. We
+// return the new Configuration that we Store()d in the ConfigurationPointer.
+func LoadConfiguration() (*Configuration, error) {
 	var new_configuration *Configuration = &Configuration{}
 	if err := defaults.Set(new_configuration); err != nil {
-		return fmt.Errorf("unable to set default configuration: %w", err)
+		return nil, fmt.Errorf("unable to set default configuration (likely a bug): %w", err)
 	}
 	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("unable to read configuration: %w", err)
+		return nil, fmt.Errorf("unable to read configuration: %w", err)
 	}
 	contextualLogger := slog.With(slog.String("context", "loading configuration"))
 	if viper.ConfigFileUsed() != "" {
@@ -77,10 +79,10 @@ func LoadConfiguration() error {
 			},
 		),
 	); err != nil {
-		return fmt.Errorf("unable to merge configuration: %w", err)
+		return nil, fmt.Errorf("unable to merge configuration (likely a bug): %w", err)
 	}
-	ConfigurationPointer = new_configuration
-	return nil
+	ConfigurationPointer.Store(new_configuration)
+	return new_configuration, nil
 }
 
 func InitializeConfiguration() {

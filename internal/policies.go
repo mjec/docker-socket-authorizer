@@ -112,7 +112,7 @@ func (pw *PolicyWatcher) Close() {
 }
 
 func WatchPolicies() (*PolicyWatcher, error) {
-	cfg := config.ConfigurationPointer
+	cfg := config.ConfigurationPointer.Load()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -176,7 +176,7 @@ func LoadPolicies() error {
 	start_time := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
 
-	cfg := config.ConfigurationPointer
+	cfg := config.ConfigurationPointer.Load()
 
 	loadPoliciesMutex.Lock()
 	defer loadPoliciesMutex.Unlock()

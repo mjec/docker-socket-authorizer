@@ -21,7 +21,7 @@ func ReflectionHandlers() map[string]http.HandlerFunc {
 
 func ifEnabled(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !config.ConfigurationPointer.Reflection.Enabled {
+		if !config.ConfigurationPointer.Load().Reflection.Enabled {
 			http.NotFound(w, r)
 			return
 		}

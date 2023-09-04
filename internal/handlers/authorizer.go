@@ -13,7 +13,7 @@ import (
 )
 
 func Authorize(w http.ResponseWriter, r *http.Request) {
-	cfg := config.ConfigurationPointer
+	cfg := config.ConfigurationPointer.Load()
 	input, err := internal.MakeInput(r)
 	if err != nil {
 		slog.Error("Error making input", slog.Any("error", err))

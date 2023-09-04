@@ -13,12 +13,10 @@ This thing is not complete. It is approximately functional.
 - [ ] Tests for go
 - [ ] Tracing
 - [ ] Better metrics configuration and documentation
-- [ ] Configuration (marked as `@CONFIG`)
 - [ ] Additional functions, e.g. `dockerHost("watchtower")` becomes `watchtower.docker_net_name.` where `docker_net_name` is set by environment variable or config
 - [ ] Refactor `input`: `input.request`, `input.config` etc
 - [ ] Make `rdns` a built-in function, rather than applying it to all inputs in the application (this can be done in policy instead)
 - [ ] CI, code of conduct
-- [ ] Listen on unix socket (but prometheus remains on tcp?)
 - [ ] rDNS timeout
 - [ ] Make query just `ok` and permit configuring query and meta-policy
 
@@ -41,7 +39,7 @@ location / {
 
 location /authorization {
     internal;
-    proxy_pass http://authorizer:8080/authorize;
+    proxy_pass http://unix:/var/run/authorizer.sock:/authorize;
     proxy_pass_request_body off;
     proxy_set_header Content-Length "";
     proxy_set_header X-Original-URI $request_uri;
@@ -81,14 +79,24 @@ test_skip_if_requester_not_watchtower {
 
 ### Available endpoints
 
-Endpoint | Description
--------- | -----------
-`/reflect` | Returns a JSON object representing the `input` object passed to OPA by `/authorize`
-`/reload` | When called with `POST` method, reloads policies
-`/metrics` | Prometheus metrics for the service
-`/authorize` | Applies policies and returns either `OK` and an HTTP 200 status code, or `Forbidden` and a 403 status code
+Endpoint | Configuration | Description
+-------- | ------ | -----------
+`/authorize` | N/A | Applies policies and returns either `OK` and an HTTP 200 status code, or `Forbidden` and a 403 status code
+`/reflection/configuration` | `reflection.enabled` | Returns a JSON object representing the currently active configuration
+`/reflection/default-configuration` | `reflection.enabled` | Returns a JSON object representing the default configuration
+`/reflection/input` | `reflection.enabled` | Returns a JSON object representing the `input` object passed to OPA by `/authorize` for this request
+`/reflection/query` | `reflection.enabled` | Returns the [query](HACKING.md#updating-the-query) evaluated against the policies
+`/reflection/meta-policy` | `reflection.enabled` | Returns the [meta-policy](HACKING.md#updating-the-meta-policy)
+`/reload/configuration` | `reload.configuration` | When called with `POST` method, reloads configuration (though some configuration options require a restart)
+`/reload/policies` | `reload.policies` | When called with `POST` method, reloads policies
+`/reload/reopen-log-file` | `reload.reopen_log_file` | When called with `POST` method, reopens log file (for example, for use with logrotate)
+`/metrics`* | `authorizer.includes_metrics`** | Prometheus metrics for the service
 
-Note that there is no authorization required to hit any of these endpoints.
+Note that there is no authorization required to hit any of these endpoints, however each endpoint will be accessible if and only if the associated configuration option is set to `true`.
+
+\* This is the default path, but can be changed by the `metrics.path` configuration option.
+
+\*\* This option determines whether the metrics endpoint is available on the same listener as the other endpoints; however it will always be available at the value of the `metrics.path` configuration option (default `/metrics`) on the listener address set in the `metrics.listener` configuration option.
 
 ### Required HTTP headers
 
@@ -110,7 +118,9 @@ TODO: observability docs
 
 ### Logs
 
-Logs are written to stderr as JSON lines with standard [`slog`](https://pkg.go.dev/log/slog) structure.
+Logs are written as JSON lines.
+
+#### Authorization logs
 
 Of particular interest are info log lines with `msg` of `Request processed`. These represent calls to `/authorize` where we did not encounter an error. They include the following values:
 
@@ -119,6 +129,8 @@ Variable | Type | Description
 `ok` | boolean | `true` if and only if the request was approved, false otherwise
 `input` | map\[string\]interface{} | The set of inputs used to evaluate this request (matches [Available Inputs](#available-inputs))
 `result` | map\[string\]interface{} | The set of results of evaluating this request
+
+It is possible to elide `input` and/or `result` by setting the `log.input` and/or `log.detailed_result` configuration options to `false`.
 
 The properties of `result` include:
 
@@ -132,11 +144,9 @@ Variable | Type | Description
 
 Other properties may exist, and you should not rely on this list being exhaustive. For more, see [HACKING.md](HACKING.md#updating-the-query).
 
-TODO: @CONFIG logging
-
 ### Metrics
 
-TODO: document prometheus metrics
+Prometheus metrics are available on the `/metrics` path.
 
 ### Traces
 
@@ -144,7 +154,9 @@ TODO: add tracing
 
 ## Configuration
 
-TODO: @CONFIG add configuration docs
+All available configuration options are listed and explained in [`config.example.yaml`](config.example.yaml).
+
+Note that some configuration options are only applied on restart, and not on reload, as documented in the example.
 
 ## Writing policies
 
@@ -263,12 +275,12 @@ You can also obtain a valid input by hitting the `/reflect` endpoint.
 This means you can manually test your policies by running something like the following (broken up onto multiple lines for readability):
 
 ```bash
-~/opa eval \
-    "$(docker-socket-authorizer introspect query)" \
+opa eval \
+    "$(curl -s --unix-socket serve.sock http://x/reflection/query)" \
     --strict \
-    --data <(docker-socket-authorizer introspect meta-policy) \
+    --data <(curl -s --unix-socket serve.sock http://x/reflection/meta-policy) \
     --data policies/watchtower.rego \
-    --input <(docker-socket-authorizer introspect input | jq '.original_ip_names = ["localhost"]') \
+    --input <(curl -s --unix-socket serve.sock http://x/reflection/input | jq '.original_ip_names = ["localhost"]') \
     | jq '.result[].bindings'
 ```
 

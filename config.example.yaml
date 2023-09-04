@@ -1,0 +1,28 @@
+policy:
+  directories:            # Directories from which to load policies. Must be a non-empty list of strings. Quotes are recommended.
+    - "./policies/"
+  watch_directories: true # Whether to watch the policy directories for changes.
+  strict_mode: true       # Whether to use OPA strict mode when evaluating policies.
+  print_enabled: true     # Whether to enable print statements in policies.
+reflection:
+  enabled: true           # Whether to enable the reflection API (i.e. endpoints under /reflection/).
+authorizer:
+  includes_metrics: false # Whether to serve metrics from the authorizer listener in addition to the metrics listener. If metrics.path conflicts with an existing built-in path, the built-in path will take precedence. Changes may take only partial effect on reload.
+  listener:               # The listener on which to serve the authorizer API (i.e. everything except metrics, and maybe metrics too). Changes take effect on restart only, not reload.
+    type: unix            # The type of listener; "tcp" and "unix" are supported. Changes take effect on restart only, not reload.
+    address: ./serve.sock # The address to listen on. A port number (":8080") or IP + port number ("127.0.0.1:8080") for "tcp" and a path for "unix". Changes take effect on restart only, not reload.
+metrics:
+  enabled: true           # Whether to serve prometheus metrics at all, on either listener. Changes may take only partial effect on reload.
+  path: /metrics          # The path to serve prometheus metrics on, on either listener. Changes take effect on restart only, not reload.
+  listener:               # The listener on which to serve the prometheus metrics API. Changes take effect on restart only, not reload.
+    type: tcp             # As for authorizer.listener.type, but also supports "none" or "" to disable this listener. Changes take effect on restart only, not reload.
+    address: ":9100"      # As for authorizer.listener.address. Changes take effect on restart only, not reload.
+reload:
+  configuration: true     # Whether to reload configuration on /reload/configuration. Can go true->false on reload, but false->true only on restart.
+  policies: true          # Whether to reload policies on /reload/policies.
+  reopen_log_file: true   # Whether to reopen the log file on /reload/reopen-log-file.
+log:
+  filename: stderr        # Where to output logs. Can be a filename, "stderr" or "stdout".
+  level: info             # Minimum log level to output. One of "debug", "info", "warn", "error".
+  input: true             # Whether to log the input to the authorizer API.
+  detailed_result: true   # Whether to log detailed results to the authorizer API. Note "ok" is always logged as a boolean field.

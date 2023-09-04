@@ -26,7 +26,7 @@ var logSettings = struct {
 func ConfigureLogger() error {
 	logSettings.mutex.Lock()
 	defer logSettings.mutex.Unlock()
-	cfg := config.ConfigurationPointer
+	cfg := config.ConfigurationPointer.Load()
 
 	var err error = nil
 	var newFileCloser io.Closer = nil

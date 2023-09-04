@@ -20,7 +20,7 @@ type RegoEvaluator struct {
 }
 
 func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
-	cfg := config.ConfigurationPointer
+	cfg := config.ConfigurationPointer.Load()
 	// TODO: @CONFIG store in files instead of inmem? A lot of extra complexity, especially on reloads
 	store := inmem.NewFromObject(map[string]interface{}{
 		"docker_socket_authorizer_storage": map[string]interface{}{},

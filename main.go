@@ -23,7 +23,7 @@ func main() {
 	// config loading error (if any) and the logger configuration error (if any).
 	// Hence these two lines MUST remain together, in this order; even though it'd be nice to
 	// use if err := ...; err != nil { ... } constructs.
-	load_configuration_err := config.LoadConfiguration()
+	cfg, load_configuration_err := config.LoadConfiguration()
 	configure_logger_err := o11y.ConfigureLogger()
 	// Now we can record those errors, which we do in the order in which they ocurred.
 	if load_configuration_err != nil {
@@ -40,8 +40,6 @@ func main() {
 	if configure_logger_err != nil {
 		slog.Error("Logger configuration failed, continuing with defaults", slog.Any("error", configure_logger_err))
 	}
-
-	cfg := config.ConfigurationPointer
 
 	// Config cannot be gracefully reloaded; sorry.
 	// The problem is we need to do things like open sockets with information contained in config, and there's no easy way to reload gracefully.
@@ -109,7 +107,7 @@ func main() {
 
 func ifMetricsEnabled(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !config.ConfigurationPointer.Metrics.Enabled {
+		if !config.ConfigurationPointer.Load().Metrics.Enabled {
 			http.NotFound(w, r)
 			return
 		}

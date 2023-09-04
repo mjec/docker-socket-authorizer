@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/mjec/docker-socket-authorizer/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	"golang.org/x/exp/slog"
 )
 
 type RegoEvaluator struct {
@@ -79,10 +81,22 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
-	if cfg.Policy.PrintEnabled {
+
+	var printTo io.Writer = os.Stdout
+	switch cfg.Policy.PrintTo {
+	case "stdout":
+		printTo = os.Stdout
+	case "stderr":
+		printTo = os.Stderr
+	case "none":
+	case "":
+		printTo = nil
+	default:
+		slog.Warn("Unsupported policy.print_to configuration value; defaulting to stdout", slog.String("print_to", cfg.Policy.PrintTo))
+	}
+	if printTo != nil {
 		rego.EnablePrintStatements(true)(newRegoObject)
-		// TODO @CONFIG set output for print statements
-		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(newRegoObject)
+		rego.PrintHook(topdown.NewPrintHook(printTo))(newRegoObject)
 	}
 	policyLoader(newRegoObject)
 

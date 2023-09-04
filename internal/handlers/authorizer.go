@@ -13,21 +13,19 @@ import (
 )
 
 func Authorize(w http.ResponseWriter, r *http.Request) {
+	var contextualLogger *slog.Logger = slog.Default()
 	cfg := config.ConfigurationPointer.Load()
 	input, err := internal.MakeInput(r)
 	if err != nil {
-		slog.Error("Error making input", slog.Any("error", err))
+		contextualLogger.Error("Error making input", slog.Any("error", err))
 		o11y.Metrics.Errors.Inc()
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintln(w, "Internal Server Error")
 		return
 	}
-	var contextualLogger *slog.Logger
 	if cfg.Log.Input {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
-		contextualLogger = slog.With(slog.Any("input", input))
-	} else {
-		contextualLogger = slog.With()
+		contextualLogger = contextualLogger.With(slog.Any("input", input))
 	}
 
 	// It's important we clone the pointer here! Otherwise we'll be racing with policy reloads
@@ -45,8 +43,6 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 	if cfg.Log.DetailedResult {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
 		contextualLogger = contextualLogger.With(slog.Any("result", resultSet[0].Bindings))
-	} else {
-		contextualLogger = slog.With()
 	}
 
 	if err := evaluator.WriteToStorage(r.Context(), resultSet[0].Bindings["to_store"].(map[string]interface{})); err != nil {

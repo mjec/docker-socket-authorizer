@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/mjec/docker-socket-authorizer/cfg"
+	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/handlers"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
@@ -16,16 +16,32 @@ import (
 )
 
 func main() {
-	cfg.InitializeConfiguration()
-	err := cfg.LoadConfiguration()
-	o11y.ConfigureLogger()
-	if err != nil {
-		var contextualLogger *slog.Logger = slog.With(slog.Any("error", err))
+	config.InitializeConfiguration()
+	// ConfigureLogger() guarantees we can use slog.Error() after it's run, but no earlier.
+	// However, we can't call ConfigureLogger() until we have read the config. So we save any
+	// error we get reading the config, go off and run ConfigureLogger(), then log both the
+	// config loading error (if any) and the logger configuration error (if any).
+	// Hence these two lines MUST remain together, in this order; even though it'd be nice to
+	// use if err := ...; err != nil { ... } constructs.
+	load_configuration_err := config.LoadConfiguration()
+	configure_logger_err := o11y.ConfigureLogger()
+	// Now we can record those errors, which we do in the order in which they ocurred.
+	if load_configuration_err != nil {
+		var contextualLogger *slog.Logger = slog.With(slog.Any("error", load_configuration_err))
 		if viper.ConfigFileUsed() == "" {
 			contextualLogger = contextualLogger.With(slog.String("file", viper.ConfigFileUsed()))
 		}
+		if config.ConfigurationPointer == nil {
+			contextualLogger.Error("Unable to load configuration file and cannot set defaults; exiting")
+			os.Exit(1)
+		}
 		contextualLogger.Warn("Unable to load configuration file; continuing with default settings")
 	}
+	if configure_logger_err != nil {
+		slog.Error("Logger configuration failed, continuing with defaults", slog.Any("error", configure_logger_err))
+	}
+
+	cfg := config.ConfigurationPointer
 
 	// Config cannot be gracefully reloaded; sorry.
 	// The problem is we need to do things like open sockets with information contained in config, and there's no easy way to reload gracefully.
@@ -39,10 +55,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.Configuration.Policy.WatchDirectories {
-		if internal.GlobalPolicyWatcher, err = internal.WatchPolicies(); err != nil {
-			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
+	if cfg.Policy.WatchDirectories {
+		policyWatcher, load_configuration_err := internal.WatchPolicies()
+		if load_configuration_err != nil {
+			slog.Error("Unable to establish policy watcher", slog.Any("error", load_configuration_err))
 		}
+		internal.GlobalPolicyWatcher.Store(policyWatcher)
 	}
 
 	serve_mux := http.NewServeMux()
@@ -50,15 +68,19 @@ func main() {
 	for path, handler := range handlers.ReflectionHandlers() {
 		serve_mux.HandleFunc("/reflection/"+path, handler)
 	}
-	serve_mux.HandleFunc("/reload", handlers.Reload)
-	serve_mux.HandleFunc("/authorize", handlers.Authorize)
 
-	if cfg.Configuration.Authorizer.IncludesMetrics {
-		serve_mux.Handle(cfg.Configuration.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
+	for path, handler := range handlers.ReloadHandlers() {
+		serve_mux.HandleFunc("/reload/"+path, handler)
 	}
 
-	if cfg.Configuration.Metrics.Listener.Type != "" && cfg.Configuration.Metrics.Listener.Type != "none" {
-		metrics_listener, err := net.Listen(cfg.Configuration.Metrics.Listener.Type, cfg.Configuration.Metrics.Listener.Address)
+	serve_mux.HandleFunc("/authorize", handlers.Authorize)
+
+	if cfg.Authorizer.IncludesMetrics {
+		serve_mux.Handle(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
+	}
+
+	if cfg.Metrics.Listener.Type != "" && cfg.Metrics.Listener.Type != "none" {
+		metrics_listener, err := net.Listen(cfg.Metrics.Listener.Type, cfg.Metrics.Listener.Address)
 		if err != nil {
 			slog.Error("Unable to start metrics server", slog.Any("error", err))
 			os.Exit(1)
@@ -66,7 +88,7 @@ func main() {
 		defer metrics_listener.Close()
 
 		metrics_serve_mux := http.NewServeMux()
-		metrics_serve_mux.HandleFunc(cfg.Configuration.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
+		metrics_serve_mux.HandleFunc(cfg.Metrics.Path, ifMetricsEnabled(promhttp.Handler()))
 
 		go func() {
 			slog.Error("Unable to start metrics server", slog.Any("reason", http.Serve(metrics_listener, metrics_serve_mux)))
@@ -75,9 +97,9 @@ func main() {
 
 	slog.Info("Server starting")
 
-	listener, err := net.Listen(cfg.Configuration.Authorizer.Listener.Type, cfg.Configuration.Authorizer.Listener.Address)
-	if err != nil {
-		slog.Error("Unable to start server", slog.Any("error", err))
+	listener, load_configuration_err := net.Listen(cfg.Authorizer.Listener.Type, cfg.Authorizer.Listener.Address)
+	if load_configuration_err != nil {
+		slog.Error("Unable to start server", slog.Any("error", load_configuration_err))
 		os.Exit(1)
 	}
 	defer listener.Close()
@@ -87,7 +109,7 @@ func main() {
 
 func ifMetricsEnabled(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !cfg.Configuration.Metrics.Enabled {
+		if !config.ConfigurationPointer.Metrics.Enabled {
 			http.NotFound(w, r)
 			return
 		}

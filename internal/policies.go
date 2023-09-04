@@ -1,18 +1,21 @@
 package internal
 
 import (
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/mjec/docker-socket-authorizer/cfg"
+	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"github.com/open-policy-agent/opa/rego"
 	"golang.org/x/exp/slog"
 )
 
 var (
-	Evaluator           *RegoEvaluator = nil
-	GlobalPolicyWatcher *PolicyWatcher = nil
+	Evaluator           *RegoEvaluator                = nil
+	GlobalPolicyWatcher atomic.Pointer[PolicyWatcher] = atomic.Pointer[PolicyWatcher]{}
+	loadPoliciesMutex   *sync.Mutex                   = &sync.Mutex{}
 )
 
 // NOTE: if you are changing the QUERY or META_POLICY, please ensure HACKING.md is also updated to reflect your changes.
@@ -95,13 +98,22 @@ ok {
 type PolicyWatcher struct {
 	watcher          *fsnotify.Watcher
 	shutdown_channel chan struct{}
+	is_closed        atomic.Bool
 }
 
+// Idempotent (only runs once, guaranteed by an atomic bool)
 func (pw *PolicyWatcher) Close() {
+	if pw.is_closed.CompareAndSwap(false, true) {
+		return
+	}
+
 	pw.shutdown_channel <- struct{}{}
+	close(pw.shutdown_channel)
 }
 
 func WatchPolicies() (*PolicyWatcher, error) {
+	cfg := config.ConfigurationPointer
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -109,10 +121,10 @@ func WatchPolicies() (*PolicyWatcher, error) {
 
 	shutdown_policy_watcher := make(chan struct{})
 
-	go handlePolicyFileChange(watcher, shutdown_policy_watcher)
+	go handlePolicyFileChange(watcher)
 	go handlePolicyWatcherClose(watcher, shutdown_policy_watcher)
 
-	for _, dir := range cfg.Configuration.Policy.Directories {
+	for _, dir := range cfg.Policy.Directories {
 		err = watcher.Add(dir)
 		if err != nil {
 			slog.Error("Unable to establish policy watcher", slog.Any("error", err))
@@ -134,7 +146,7 @@ func handlePolicyWatcherClose(watcher *fsnotify.Watcher, shutdown_policy_watcher
 	slog.Info("Shutting down policy watcher")
 }
 
-func handlePolicyFileChange(watcher *fsnotify.Watcher, shutdown_policy_watcher chan struct{}) {
+func handlePolicyFileChange(watcher *fsnotify.Watcher) {
 	for {
 		select {
 		case event, ok := <-watcher.Events:
@@ -164,7 +176,13 @@ func LoadPolicies() error {
 	start_time := time.Now()
 	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(start_time).Seconds())
 
-	e, err := NewEvaluator(rego.Load(cfg.Configuration.Policy.Directories, nil))
+	cfg := config.ConfigurationPointer
+
+	loadPoliciesMutex.Lock()
+	defer loadPoliciesMutex.Unlock()
+	o11y.Metrics.PolicyMutexWaitTimer.Observe(time.Since(start_time).Seconds())
+
+	e, err := NewEvaluator(rego.Load(cfg.Policy.Directories, nil))
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/mjec/docker-socket-authorizer/cfg"
+	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"golang.org/x/exp/slog"
 )
@@ -15,13 +15,13 @@ func ReflectionHandlers() map[string]http.HandlerFunc {
 		"input":         ifEnabled(inputHandler),
 		"query":         ifEnabled(queryHandler),
 		"meta-policy":   ifEnabled(metaPolicyHandler),
-		"configuration": ifEnabled(configHandler),
+		"configuration": ifEnabled(configurationHandler),
 	}
 }
 
 func ifEnabled(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !cfg.Configuration.Reflection.Enabled {
+		if !config.ConfigurationPointer.Reflection.Enabled {
 			http.NotFound(w, r)
 			return
 		}
@@ -60,9 +60,9 @@ func metaPolicyHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s", internal.META_POLICY)
 }
 
-func configHandler(w http.ResponseWriter, r *http.Request) {
+func configurationHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", "application/json")
-	j, err := json.MarshalIndent(cfg.Configuration, "", "  ")
+	j, err := json.MarshalIndent(config.ConfigurationPointer, "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Add("content-type", "text/plain")

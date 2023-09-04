@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mjec/docker-socket-authorizer/cfg"
+	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
@@ -20,6 +20,7 @@ type RegoEvaluator struct {
 }
 
 func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
+	cfg := config.ConfigurationPointer
 	// TODO: @CONFIG store in files instead of inmem? A lot of extra complexity, especially on reloads
 	store := inmem.NewFromObject(map[string]interface{}{
 		"docker_socket_authorizer_storage": map[string]interface{}{},
@@ -39,7 +40,7 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}()
 
 	policy_meta_rego := rego.New(
-		rego.Strict(cfg.Configuration.Policy.StrictMode),
+		rego.Strict(cfg.Policy.StrictMode),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
@@ -72,13 +73,13 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}
 
 	new_rego_object := rego.New(
-		rego.Strict(cfg.Configuration.Policy.StrictMode),
+		rego.Strict(cfg.Policy.StrictMode),
 		rego.Store(store),
 		rego.Transaction(transaction),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
 	)
-	if cfg.Configuration.Policy.PrintEnabled {
+	if cfg.Policy.PrintEnabled {
 		rego.EnablePrintStatements(true)(new_rego_object)
 		rego.PrintHook(topdown.NewPrintHook(os.Stdout))(new_rego_object)
 	}

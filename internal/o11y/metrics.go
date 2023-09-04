@@ -6,11 +6,12 @@ import (
 )
 
 var Metrics = struct {
-	Approved        prometheus.Counter
-	Denied          prometheus.Counter
-	Errors          prometheus.Counter
-	PolicyLoads     prometheus.Counter
-	PolicyLoadTimer prometheus.Histogram
+	Approved             prometheus.Counter
+	Denied               prometheus.Counter
+	Errors               prometheus.Counter
+	PolicyLoads          prometheus.Counter
+	PolicyLoadTimer      prometheus.Histogram
+	PolicyMutexWaitTimer prometheus.Histogram
 }{
 	Approved: promauto.NewCounter(prometheus.CounterOpts{
 		Name: "docker_sock_authorizer_approved",
@@ -31,5 +32,9 @@ var Metrics = struct {
 	PolicyLoadTimer: promauto.NewHistogram(prometheus.HistogramOpts{
 		Name: "docker_sock_authorizer_policy_load_seconds",
 		Help: "The time it takes to load policies for the authorizer",
+	}),
+	PolicyMutexWaitTimer: promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: "docker_sock_authorizer_policy_mutex_wait_seconds",
+		Help: "The time it takes to acquire the policy mutex; always contained in policy_load time",
 	}),
 }

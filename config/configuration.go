@@ -1,4 +1,4 @@
-package cfg
+package config
 
 import (
 	"fmt"
@@ -7,11 +7,13 @@ import (
 	"dario.cat/mergo"
 	"github.com/creasty/defaults"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/slog"
 )
 
-var Configuration *config
+// Any copy of this pointer is guaranteed to be consistent (immutable)
+var ConfigurationPointer *Configuration
 
-type config struct {
+type Configuration struct {
 	Policy struct {
 		Directories      []string `default:"[\"./policies/\"]" json:"directories"`
 		WatchDirectories bool     `default:"true" json:"watch_directories"`
@@ -39,23 +41,46 @@ type config struct {
 	Reload struct {
 		Configuration bool `default:"true" json:"configuration"`
 		Policies      bool `default:"true" json:"policies"`
+		ReopenLogFile bool `default:"true" json:"reopen_log_file"`
 	} `json:"reload"`
 	Log struct {
+		Filename       string `default:"stderr" json:"filename"`
 		Level          string `default:"info" json:"level"`
 		Input          bool   `default:"true" json:"input"`
 		DetailedResult bool   `default:"true" json:"detailed_result"`
 	} `json:"log"`
 }
 
+// Thread safe, ish: we atomically swap in the new ConfigurationPointer object;
+// we don't guarantee a winner, but we do guarantee a valid ConfigurationPointer.
 func LoadConfiguration() error {
-	Configuration = &config{}
-	if err := defaults.Set(Configuration); err != nil {
-		panic(err)
+	var new_configuration *Configuration = &Configuration{}
+	if err := defaults.Set(new_configuration); err != nil {
+		return fmt.Errorf("unable to set default configuration: %w", err)
 	}
 	if err := viper.ReadInConfig(); err != nil {
 		return fmt.Errorf("unable to read configuration: %w", err)
 	}
-	return mergo.MapWithOverwrite(Configuration, viper.AllSettings(), mergo.WithTransformers(stringListTransformer{}))
+	contextualLogger := slog.With(slog.String("context", "loading configuration"))
+	if viper.ConfigFileUsed() != "" {
+		contextualLogger = contextualLogger.With(slog.String("config_file", viper.ConfigFileUsed()))
+	}
+	if err := mergo.Map(
+		new_configuration,
+		viper.AllSettings(),
+		mergo.WithOverride,
+		mergo.WithTypeCheck,
+		mergo.WithOverwriteWithEmptyValue,
+		mergo.WithTransformers(
+			stringListTransformer{
+				logger: contextualLogger,
+			},
+		),
+	); err != nil {
+		return fmt.Errorf("unable to merge configuration: %w", err)
+	}
+	ConfigurationPointer = new_configuration
+	return nil
 }
 
 func InitializeConfiguration() {
@@ -65,16 +90,25 @@ func InitializeConfiguration() {
 }
 
 type stringListTransformer struct {
+	logger *slog.Logger
 }
 
+// Transforms a slice of interfaces into a slice of strings, discarding any non-string values and logging a warning.
 func (t stringListTransformer) Transformer(typ reflect.Type) func(dst, src reflect.Value) error {
 	if typ == reflect.TypeOf([]string{}) {
 		return func(dst, src reflect.Value) error {
 			if dst.CanSet() && src.Kind() == reflect.Slice {
-				dst.Set(reflect.MakeSlice(dst.Type(), src.Len(), src.Cap()))
+				listValues := reflect.MakeSlice(dst.Type(), 0, src.Cap())
 				for i := 0; i < src.Len(); i++ {
-					dst.Index(i).SetString(src.Index(i).Interface().(string))
+					val := src.Index(i).Interface()
+					switch val := val.(type) {
+					case string:
+						listValues = reflect.Append(listValues, reflect.ValueOf(val))
+					default:
+						t.logger.Warn("Unable to read value in list as a string (may need to be quoted)", slog.Any("value", val))
+					}
 				}
+				dst.Set(listValues)
 			}
 			return nil
 		}

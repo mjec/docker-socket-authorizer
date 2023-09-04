@@ -72,7 +72,6 @@ func LoadConfiguration() (*Configuration, error) {
 		viper.AllSettings(),
 		mergo.WithOverride,
 		mergo.WithTypeCheck,
-		mergo.WithOverwriteWithEmptyValue,
 		mergo.WithTransformers(
 			stringListTransformer{
 				logger: contextualLogger,

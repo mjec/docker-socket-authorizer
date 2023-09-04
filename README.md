@@ -87,7 +87,7 @@ Endpoint | Configuration | Description
 `/reflection/input` | `reflection.enabled` | Returns a JSON object representing the `input` object passed to OPA by `/authorize` for this request
 `/reflection/query` | `reflection.enabled` | Returns the [query](HACKING.md#updating-the-query) evaluated against the policies
 `/reflection/meta-policy` | `reflection.enabled` | Returns the [meta-policy](HACKING.md#updating-the-meta-policy)
-`/reload/configuration` | `reload.configuration` | When called with `POST` method, reloads configuration (though some configuration options require a restart)
+`/reload/configuration` | `reload.configuration` | When called with `POST` method, reloads configuration (though some configuration options require a restart); also restarts policy watcher (if appropriate) and reopens the log file
 `/reload/policies` | `reload.policies` | When called with `POST` method, reloads policies
 `/reload/reopen-log-file` | `reload.reopen_log_file` | When called with `POST` method, reopens log file (for example, for use with logrotate)
 `/metrics`* | `authorizer.includes_metrics`** | Prometheus metrics for the service

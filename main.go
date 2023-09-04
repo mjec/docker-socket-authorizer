@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +25,11 @@ func main() {
 	// Hence these two lines MUST remain together, in this order; even though it'd be nice to
 	// use if err := ...; err != nil { ... } constructs.
 	cfg, loadConfigurationErr := config.LoadConfiguration()
+	if loadConfigurationErr != nil {
+		if !config.ConfigurationPointer.CompareAndSwap(nil, config.DefaultConfiguration()) {
+			panic(fmt.Errorf("unable to set configuration to default (likely a bug) after failing to load configuration: %w", loadConfigurationErr))
+		}
+	}
 	configureLoggerErr := o11y.ConfigureLogger()
 	// Now we can record those errors, which we do in the order in which they ocurred.
 	if loadConfigurationErr != nil {
@@ -31,11 +37,7 @@ func main() {
 		if viper.ConfigFileUsed() == "" {
 			contextualLogger = contextualLogger.With(slog.String("file", viper.ConfigFileUsed()))
 		}
-		if config.ConfigurationPointer == nil {
-			contextualLogger.Error("Unable to load configuration file and cannot set defaults; exiting")
-			os.Exit(1)
-		}
-		contextualLogger.Warn("Unable to load configuration file; continuing with default settings")
+		contextualLogger.Warn("Unable to load configuration file; continuing with defaults", slog.Any("error", loadConfigurationErr))
 	}
 	if configureLoggerErr != nil {
 		slog.Error("Logger configuration failed, continuing with defaults", slog.Any("error", configureLoggerErr))

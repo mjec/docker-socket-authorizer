@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal"
@@ -23,9 +24,24 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Internal Server Error")
 		return
 	}
-	if cfg.Log.Input {
-		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
+
+	if len(cfg.Log.Input) == 1 && cfg.Log.Input[0] == "*" {
 		contextualLogger = contextualLogger.With(slog.Any("input", input))
+	} else if len(cfg.Log.Input) > 0 {
+		inputToLog := make(map[string]interface{}, len(cfg.Log.Input))
+
+		inputElem := reflect.ValueOf(input).Elem()
+		typeOfInput := inputElem.Type()
+		for i := 0; i < inputElem.NumField(); i++ {
+			for _, key := range cfg.Log.Input {
+				if key == typeOfInput.Field(i).Name {
+					inputToLog[key] = inputElem.Field(i).Interface()
+					break
+				}
+			}
+		}
+
+		contextualLogger = contextualLogger.With(slog.Any("input", inputToLog))
 	}
 
 	// It's important we clone the pointer here! Otherwise we'll be racing with policy reloads
@@ -40,9 +56,17 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cfg.Log.DetailedResult {
-		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
+	if len(cfg.Log.Result) == 1 && cfg.Log.Result[0] == "*" {
 		contextualLogger = contextualLogger.With(slog.Any("result", resultSet[0].Bindings))
+	} else if len(cfg.Log.Result) > 0 {
+		bindingsToLog := make(map[string]interface{}, len(cfg.Log.Result))
+		for _, key := range cfg.Log.Result {
+			if value, hasKey := resultSet[0].Bindings[key]; hasKey {
+				bindingsToLog[key] = value
+			}
+		}
+
+		contextualLogger = contextualLogger.With(slog.Any("result", bindingsToLog))
 	}
 
 	if err := evaluator.WriteToStorage(r.Context(), resultSet[0].Bindings["to_store"].(map[string]interface{})); err != nil {
@@ -59,7 +83,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		o11y.Metrics.Approved.Inc()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "OK")
-		contextualLogger.Info("Request processed", slog.Bool("ok", true))
+		contextualLogger.Info("Request processed")
 		return
 	}
 
@@ -67,5 +91,5 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 	o11y.Metrics.Denied.Inc()
 	w.WriteHeader(http.StatusForbidden)
 	fmt.Fprintln(w, "Forbidden")
-	contextualLogger.Info("Request processed", slog.Bool("ok", false))
+	contextualLogger.Info("Request processed")
 }

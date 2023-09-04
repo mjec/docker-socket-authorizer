@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/mjec/docker-socket-authorizer/cfg"
+	"github.com/mjec/docker-socket-authorizer/config"
 	"github.com/mjec/docker-socket-authorizer/internal"
 	"github.com/mjec/docker-socket-authorizer/internal/o11y"
 	"golang.org/x/exp/slog"
@@ -13,6 +13,7 @@ import (
 )
 
 func Authorize(w http.ResponseWriter, r *http.Request) {
+	cfg := config.ConfigurationPointer
 	input, err := internal.MakeInput(r)
 	if err != nil {
 		slog.Error("Error making input", slog.Any("error", err))
@@ -22,7 +23,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var contextualLogger *slog.Logger
-	if cfg.Configuration.Log.Input {
+	if cfg.Log.Input {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
 		contextualLogger = slog.With(slog.Any("input", input))
 	} else {
@@ -41,7 +42,7 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cfg.Configuration.Log.DetailedResult {
+	if cfg.Log.DetailedResult {
 		// TODO: @CONFIG it'd be nice to be able to configure which fields are logged
 		contextualLogger = contextualLogger.With(slog.Any("result", result_set[0].Bindings))
 	} else {

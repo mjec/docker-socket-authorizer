@@ -93,8 +93,9 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		printTo = os.Stdout
 	case "stderr":
 		printTo = os.Stderr
-	case "none":
 	case "":
+		fallthrough
+	case "none":
 		printTo = nil
 	default:
 		slog.Warn("Unsupported policy.print_to configuration value; defaulting to stdout", slog.String("print_to", cfg.Policy.PrintTo))

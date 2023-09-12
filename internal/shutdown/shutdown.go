@@ -100,7 +100,7 @@ func Shutdown(reason string, logLevel slog.Level, logger *slog.Logger) bool {
 }
 
 // Blocks until shutdown is requested, but only on the first call. Subsequent calls have no effect and return immediately.
-func Wait() {
+func WaitForShutdown() {
 	shutdownManager.waitOnce.Do(func() {
 		<-shutdownManager.shutdownChannel
 	})

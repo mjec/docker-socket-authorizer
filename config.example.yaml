@@ -1,9 +1,9 @@
 policy:
   directories:            # Directories from which to load policies. Must be a non-empty list of strings. Quotes are recommended.
     - "./policies/"
-  watch_directories: true # Whether to watch the policy directories for changes.
-  strict_mode: true       # Whether to use OPA strict mode when evaluating policies.
-  print_to: stdout        # The destination for print statements in policies. Can be "stdout", "stderr" or "none" to disable printing.
+  watch_directories: true # Whether to watch the policy directories for changes and automatically reload on changes.
+  strict_mode: true       # Whether to use OPA strict mode when evaluating policies (https://www.openpolicyagent.org/docs/v0.55.0/policy-language/#strict-mode).
+  print_to: stdout        # The destination for print statements in policies. Can be "stdout", "stderr", or "none" to disable printing.
 reflection:
   enabled: true           # Whether to enable the reflection API (i.e. endpoints under /reflection/).
 authorizer:
@@ -22,7 +22,7 @@ reload:
   policies: true          # Whether to reload policies on /reload/policies.
   reopen_log_file: true   # Whether to reopen the log file on /reload/reopen-log-file.
 log:
-  filename: stderr        # Where to output logs. Can be a filename, "stderr" or "stdout".
+  filename: stderr        # Where to output logs. Can be a filename, "stderr", or "stdout".
   level: info             # Minimum log level to output. One of "debug", "info", "warn", "error".
   input: []               # The input fields to log from the authorization endpoint. Must be a list of strings. If the list is empty, no fields are logged. If the list contains a single element "*", all fields are logged.
   result:                 # The result fields to log from the authorization endpoint. Must be a list of strings. If the list is empty, no fields are logged. If the list contains a single element "*", all fields are logged.

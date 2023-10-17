@@ -46,7 +46,7 @@ func remoteNames(r *http.Request) ([]string, []string, error) {
 }
 
 func rdns(ip string) ([]string, error) {
-	if ip == "" {
+	if ip == "" || ip == "@" {
 		return make([]string, 0), nil
 	}
 

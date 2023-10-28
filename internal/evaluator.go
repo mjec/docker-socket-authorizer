@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 
 	"github.com/mjec/docker-socket-authorizer/config"
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/types"
 	"golang.org/x/exp/slog"
 )
 
@@ -41,7 +44,66 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 		}
 	}()
 
+	function_dns_a := rego.Function1(
+		&rego.Function{
+			Name:             "dns.a",
+			Decl:             types.NewFunction(types.Args(types.S), types.NewArray(make([]types.Type, 0), types.S)),
+			Memoize:          true,
+			Nondeterministic: true,
+		},
+		func(_ rego.BuiltinContext, nameArgument *ast.Term) (*ast.Term, error) {
+			var name string
+			if err := ast.As(nameArgument.Value, &name); err != nil {
+				return nil, fmt.Errorf("dns.a: invalid argument (string required): %s", err)
+			}
+
+			forwardIps, err := net.LookupHost(name)
+			if err != nil {
+				return nil, fmt.Errorf("dns.a: error: %s", err)
+			}
+
+			ipTerms := make([]*ast.Term, len(forwardIps))
+			for i, name := range forwardIps {
+				ipTerms[i] = ast.StringTerm(name)
+			}
+
+			return ast.ArrayTerm(ipTerms...), nil
+		},
+	)
+	function_dns_ptr := rego.Function1(
+		&rego.Function{
+			Name:             "dns.ptr",
+			Decl:             types.NewFunction(types.Args(types.S), types.NewArray(make([]types.Type, 0), types.S)),
+			Memoize:          true,
+			Nondeterministic: true,
+		},
+		func(_ rego.BuiltinContext, ipArgument *ast.Term) (*ast.Term, error) {
+			var ip string
+			if err := ast.As(ipArgument.Value, &ip); err != nil {
+				return nil, fmt.Errorf("dns.ptr: invalid argument (string required): %s", err)
+			}
+
+			if ip == "" || ip == "@" {
+				return ast.ArrayTerm(), nil
+			}
+
+			names, err := net.LookupAddr(ip)
+			if err != nil {
+				return nil, fmt.Errorf("dns.ptr: invalid argument (IP address required): %s", err)
+			}
+
+			nameTerms := make([]*ast.Term, len(names))
+			for i, name := range names {
+				nameTerms[i] = ast.StringTerm(name)
+			}
+
+			return ast.ArrayTerm(nameTerms...), nil
+		},
+	)
+
 	policyMetaRego := rego.New(
+		function_dns_ptr,
+		function_dns_a,
 		rego.Strict(cfg.Policy.StrictMode),
 		rego.Module("docker_socket_meta_policy", META_POLICY),
 		rego.Query(QUERY),
@@ -80,6 +142,8 @@ func NewEvaluator(policyLoader func(*rego.Rego)) (*RegoEvaluator, error) {
 	}
 
 	newRegoObject := rego.New(
+		function_dns_ptr,
+		function_dns_a,
 		rego.Strict(cfg.Policy.StrictMode),
 		rego.Store(store),
 		rego.Transaction(transaction),

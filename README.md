@@ -218,13 +218,10 @@ The `input` variable in each policy contains the following properties.
 
 Input name | Type | Description
 ---------- | ---- | -----------
-`original_ip_names` | []string | A list of names returned from doing an rDNS lookup of `original_ip`
-`original_uri` | string | The original request URI (including query string)
-`original_method` | string | The original request method
-`original_ip` | string | The original request IP address
-`uri` | string | The request current URI (including query string)
-`remote_addr` | string | The address and port of the other side of the present connection (normally this will match nginx)
-`remote_addr_names` | []string | A list of names returned from doing an rDNS lookup of the IP address in `remote_addr`
+`request.uri` | string | The request current URI (including query string)
+`request.remote_addr` | string | The address and port of the other side of the present connection
+`request.headers` | map\[string\]\[\]string | All keys lowercase
+`request.body` | string | Request body
 
 Changing available inputs requires changing the code; for more see [HACKING.md](HACKING.md).
 
@@ -270,17 +267,9 @@ to_store := 1 { # WRONG
 
 OPA has a [built-in testing framework](https://www.openpolicyagent.org/docs/v0.55.0/policy-testing/) that can be used to ensure policies are correct. Those tests are not run by this application, but are useful when developing policies.
 
-It is also appropriate to use `opa eval` to run manual tests of policies. Doing so requires an input, query, and policy. To aid in this, you can call the application with the `introspect` command, as follows:
+Be aware that if you wish to use a function provided by docker-socket-authorizer (e.g. `dns.ptr` or `dns.a`) you cannot test those. You can however run `opa capabilities --current` and then patch with capabilities.json.patch and then run `opa test --capabilities capabilities.json` and you'll be fine as long as you have mocked out those docker-socket-authorizer built-ins, and you have done so as _actual function mocks_ not just setting them to fixed values.
 
-Command | Output
-------- | ------
-`introspect query` | The OPA query used to evaluate requests
-`introspect meta-policy` | The meta-policy that governs whether policies are valid
-`introspect input` | An empty JSON object matching the structure of `input`
-
-You can also obtain a valid input by hitting the `/reflect` endpoint.
-
-This means you can manually test your policies by running something like the following (broken up onto multiple lines for readability):
+It is also appropriate to use `opa eval` to run manual tests of policies. Doing so requires an input, query, and policy. This means you can manually test your policies by running something like the following (broken up onto multiple lines for readability):
 
 ```bash
 opa eval \
@@ -288,7 +277,7 @@ opa eval \
     --strict \
     --data <(curl -s --unix-socket serve.sock http://x/reflection/meta-policy) \
     --data policies/watchtower.rego \
-    --input <(curl -s --unix-socket serve.sock http://x/reflection/input | jq '.original_ip_names = ["localhost"]') \
+    --input <(curl -s --unix-socket serve.sock http://x/reflection/input | jq '.request.headers["x-original-ip"] = ["127.0.0.1"]') \
     | jq '.result[].bindings'
 ```
 

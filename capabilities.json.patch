@@ -1,0 +1,45 @@
+diff --git a/capabilities.json.orig b/capabilities.json
+index a7c61b6..089ff79 100644
+--- a/capabilities.json.orig
++++ b/capabilities.json
+@@ -1,21 +1,50 @@
+ {
+   "builtins": [
++    {
++      "name": "dns.ptr",
++      "decl": {
++        "args": [
++          {
++            "type": "string"
++          }
++        ],
++        "result": {
++          "type": "array",
++          "of": {
++            "type": "string"
++          }
++        },
++        "type": "function"
++      },
++      "nondeterministic": true
++    },
++    {
++      "name": "dns.a",
++      "decl": {
++        "args": [
++          {
++            "type": "string"
++          }
++        ],
++        "result": {
++          "type": "array",
++          "of": {
++            "type": "string"
++          }
++        },
++        "type": "function"
++      },
++      "nondeterministic": true
++    },
+     {
+       "name": "abs",

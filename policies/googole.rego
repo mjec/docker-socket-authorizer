@@ -6,10 +6,11 @@ default result := "skip"
 default message := "Original IP rDNS did not match"
 
 # Match this rule by setting x-original-ip to 8.8.8.8
+ip := input.request.headers["x-original-ip"][_]
 
 result = "allow" {
-    "dns.google." in dns.ptr(input.request.headers["x-original-ip"][0])
-    input.request.headers["x-original-ip"][0] in dns.a("dns.google.")
+    "dns.google." in dns.ptr(ip)
+    ip in dns.a("dns.google.")
 }
 
 message = "Hi google" {

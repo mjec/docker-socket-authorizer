@@ -190,7 +190,9 @@ func InitializePolicies(cfg *config.Configuration) error {
 
 func LoadPolicies() error {
 	startTime := time.Now()
-	defer o11y.Metrics.PolicyLoadTimer.Observe(time.Since(startTime).Seconds())
+	defer func() {
+		o11y.Metrics.PolicyLoadTimer.Observe(time.Since(startTime).Seconds())
+	}()
 
 	cfg := config.ConfigurationPointer.Load()
 

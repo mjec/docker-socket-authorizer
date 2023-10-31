@@ -267,7 +267,7 @@ to_store := 1 { # WRONG
 
 OPA has a [built-in testing framework](https://www.openpolicyagent.org/docs/v0.55.0/policy-testing/) that can be used to ensure policies are correct. Those tests are not run by this application, but are useful when developing policies.
 
-Be aware that if you wish to use a function provided by docker-socket-authorizer (e.g. `dns.ptr` or `dns.a`) you cannot test those. You can however run `opa capabilities --current` and then patch with capabilities.json.patch and then run `opa test --capabilities capabilities.json` and you'll be fine as long as you have mocked out those docker-socket-authorizer built-ins, and you have done so as _actual function mocks_ not just setting them to fixed values.
+Be aware that if you wish to use a function provided by docker-socket-authorizer (e.g. `dns.ptr` or `dns.a`) you cannot test those. You can however run `opa capabilities --current` and then patch with capabilities.json.patch and then run `opa test --capabilities capabilities.json` and you'll be fine as long as you have mocked out those docker-socket-authorizer built-ins, and you have done so as *actual function mocks* not just setting them to fixed values.
 
 It is also appropriate to use `opa eval` to run manual tests of policies. Doing so requires an input, query, and policy. This means you can manually test your policies by running something like the following (broken up onto multiple lines for readability):
 
